@@ -1,0 +1,37 @@
+crates/rustlet-runtime/src/lib.rs
+  f84287449064e176 3-7
+crates/rustlet-runtime/src/base64_module.rs
+  f84287449064e176 1-22
+crates/rustlet-runtime/src/applet.rs
+  f84287449064e176 12-15,18,41-42,44-49,58-62,89-90,96,101-104,113-154,214,230,251,264,276-431
+crates/rustlet-runtime/src/time_module.rs
+  f84287449064e176 1-268
+crates/rustlet-runtime/src/random_module.rs
+  f84287449064e176 1-42
+crates/rustlet-runtime/src/math_module.rs
+  f84287449064e176 1-78
+crates/rustlet-runtime/src/json_module.rs
+  f84287449064e176 1-106
+crates/rustlet-runtime/Cargo.toml
+  f84287449064e176 14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "abfe3bd08f680c275123cd55776e4f717c3a1ed1",
+  "prompts": {
+    "f84287449064e176": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7016a025-6337-44ca-aa46-e2c499c476fc",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "datagutt",
+      "messages": [],
+      "total_additions": 241,
+      "total_deletions": 101,
+      "accepted_lines": 752,
+      "overriden_lines": 0
+    }
+  }
+}
