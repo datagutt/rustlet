@@ -1,0 +1,27 @@
+crates/rustlet-render/src/render/text.rs
+  f84287449064e176 85-89,96,173-174,207-208,215-216
+crates/rustlet-render/src/fonts/mod.rs
+  f84287449064e176 10-15,18-32,51,62,64-66,68-158,162-163,166-179,181-183,185-223,239-242,246-270,275-314,316-320
+crates/rustlet-render/src/render/wrapped_text.rs
+  f84287449064e176 225-229,238
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "f3cdc7addfb03684c2413dbcf08d0d93c68374d9",
+  "prompts": {
+    "f84287449064e176": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7016a025-6337-44ca-aa46-e2c499c476fc",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "datagutt",
+      "messages": [],
+      "total_additions": 273,
+      "total_deletions": 143,
+      "accepted_lines": 273,
+      "overriden_lines": 0
+    }
+  }
+}
