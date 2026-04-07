@@ -1,0 +1,31 @@
+crates/rustlet-encode/Cargo.toml
+  f84287449064e176 6-8,15
+crates/rustlet-cli/Cargo.toml
+  f84287449064e176 9
+crates/rustlet-encode/src/filter.rs
+  f84287449064e176 1-301
+crates/rustlet-encode/src/lib.rs
+  f84287449064e176 1-2,5
+crates/rustlet-cli/src/main.rs
+  f84287449064e176 7,39-46,66-67,77,84,87-88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "15b14d216f68f5326edb6793249f665587f6142d",
+  "prompts": {
+    "f84287449064e176": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7016a025-6337-44ca-aa46-e2c499c476fc",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "datagutt",
+      "messages": [],
+      "total_additions": 938,
+      "total_deletions": 14,
+      "accepted_lines": 938,
+      "overriden_lines": 0
+    }
+  }
+}
