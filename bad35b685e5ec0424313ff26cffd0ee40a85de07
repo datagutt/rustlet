@@ -1,0 +1,39 @@
+crates/rustlet-runtime/src/starlark_widgets.rs
+  166439ed842d1b56 6-7,9-11,16-17,31,35,39,45-76,78-83,86,93-94,101-106,108,113,118-123,125,130,145-153,165,171-177,179-191,193-249
+crates/rustlet-runtime/src/starlark_bytes.rs
+  166439ed842d1b56 1-30
+crates/rustlet-render/src/render/image_widget.rs
+  166439ed842d1b56 8,21,25,42,52,63-75,79-80
+crates/rustlet-runtime/src/starlark_file.rs
+  166439ed842d1b56 9-10,14-16,23,33-45,53,59-71
+crates/rustlet-runtime/Cargo.toml
+  166439ed842d1b56 20-22
+crates/rustlet-runtime/src/render_module.rs
+  166439ed842d1b56 2-3,7,10-11,15,17,19-68,72,74,78-79,83-84,86,91,93,97-98,103-107,114-123,159-213,215-262,264-268,270-324,336,342-347,349-351,353,367,369,375-382,384,410-417,420,430-437,440-441,443-446,448,460-467,470-471,473-476,478,487,489-490,492,504,507,512-515,517-523,525,541-543,545,550-551,554-561,563-565,567-570,572,581,583-584,586,595,597-598,600,606,609,612,615-625,627,638,640,642-647,649,651-679,681-689,691-723,725-748,750-795,797-803,805-833,835,843,846,859-860,868-878,880-883,885,897-902,904
+crates/rustlet-runtime/src/starlark_canvas.rs
+  166439ed842d1b56 39,45-49,53,59-86
+crates/rustlet-runtime/src/applet.rs
+  166439ed842d1b56 9,11,137-143,281-283,668-743,747-749,765-769,771
+crates/rustlet-runtime/src/lib.rs
+  166439ed842d1b56 11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "bad35b685e5ec0424313ff26cffd0ee40a85de07",
+  "prompts": {
+    "166439ed842d1b56": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d69d4-aab3-7fc3-8973-727b14a877ad",
+        "model": "gpt-5.4"
+      },
+      "human_author": "datagutt",
+      "messages": [],
+      "total_additions": 939,
+      "total_deletions": 117,
+      "accepted_lines": 968,
+      "overriden_lines": 43
+    }
+  }
+}
