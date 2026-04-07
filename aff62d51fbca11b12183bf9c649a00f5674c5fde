@@ -1,0 +1,29 @@
+crates/rustlet-render/src/render/mod.rs
+  f84287449064e176 21
+crates/rustlet-render/src/render/emoji.rs
+  f84287449064e176 1-245
+crates/rustlet-render/src/lib.rs
+  f84287449064e176 11
+crates/rustlet-render/Cargo.toml
+  f84287449064e176 8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "aff62d51fbca11b12183bf9c649a00f5674c5fde",
+  "prompts": {
+    "f84287449064e176": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7016a025-6337-44ca-aa46-e2c499c476fc",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "datagutt",
+      "messages": [],
+      "total_additions": 489,
+      "total_deletions": 20,
+      "accepted_lines": 489,
+      "overriden_lines": 0
+    }
+  }
+}
