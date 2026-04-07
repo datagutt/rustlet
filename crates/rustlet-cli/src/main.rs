@@ -44,6 +44,10 @@ enum Commands {
         /// Integer magnification factor
         #[arg(long, default_value_t = 1)]
         magnify: u32,
+
+        /// Double the canvas size (128x64) and use terminus-16 default font
+        #[arg(long = "2x")]
+        double: bool,
     },
 }
 
@@ -65,7 +69,14 @@ fn main() -> Result<()> {
             format,
             filter,
             magnify,
+            double,
         } => {
+            let (width, height, is_2x) = if double {
+                (128, 64, true)
+            } else {
+                (width, height, false)
+            };
+
             let src = std::fs::read_to_string(&file)?;
             let id = file
                 .file_stem()
@@ -74,7 +85,7 @@ fn main() -> Result<()> {
 
             let applet = Applet::new();
             let config = HashMap::new();
-            let roots = applet.run(id, &src, &config, width, height)?;
+            let roots = applet.run_with_options(id, &src, &config, width, height, is_2x)?;
 
             if roots.is_empty() {
                 bail!("main() returned no roots");
