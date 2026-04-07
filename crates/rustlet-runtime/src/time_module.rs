@@ -1,72 +1,52 @@
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use starlark::environment::GlobalsBuilder;
+use starlark::eval::Evaluator;
+use starlark::values::Value;
+
+use crate::starlark_time::{StarlarkTime, parse_iso8601, datetime_to_unix};
 
 #[starlark::starlark_module]
 pub fn time_module(builder: &mut GlobalsBuilder) {
-    /// Returns current UTC time as an ISO 8601 string.
-    fn now() -> anyhow::Result<String> {
-        let duration = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|e| anyhow::anyhow!("system time error: {e}"))?;
-
-        let secs = duration.as_secs();
-        let (year, month, day, hour, min, sec) = unix_to_datetime(secs as i64);
-        Ok(format!(
-            "{year:04}-{month:02}-{day:02}T{hour:02}:{min:02}:{sec:02}Z"
-        ))
+    fn now<'v>(eval: &mut Evaluator<'v, '_, '_>) -> anyhow::Result<Value<'v>> {
+        Ok(eval.heap().alloc(StarlarkTime::now()))
     }
 
-    /// Parses a time string and returns a normalized ISO 8601 string.
-    ///
-    /// Supports ISO 8601 (`2006-01-02T15:04:05Z`), date-only (`2006-01-02`),
-    /// and RFC 2822 (`Mon, 02 Jan 2006 15:04:05 MST`).
-    /// The `format` and `timezone` params are accepted for Go compatibility
-    /// but the format param is currently not used for custom parsing.
-    fn parse_time(
+    fn parse_time<'v>(
         s: &str,
         #[starlark(default = "")] _format: &str,
         #[starlark(default = "")] _timezone: &str,
-    ) -> anyhow::Result<String> {
-        // Try ISO 8601: 2006-01-02T15:04:05Z or 2006-01-02T15:04:05+00:00
+        eval: &mut Evaluator<'v, '_, '_>,
+    ) -> anyhow::Result<Value<'v>> {
+        // Try ISO 8601: 2006-01-02T15:04:05Z
         if let Some(ts) = parse_iso8601(s) {
-            let (year, month, day, hour, min, sec) = unix_to_datetime(ts);
-            return Ok(format!(
-                "{year:04}-{month:02}-{day:02}T{hour:02}:{min:02}:{sec:02}Z"
-            ));
+            return Ok(eval.heap().alloc(StarlarkTime::from_unix(ts, 0)));
         }
 
         // Try date-only: 2006-01-02
         if s.len() == 10 && s.as_bytes()[4] == b'-' && s.as_bytes()[7] == b'-' {
-            let year: i32 = s[0..4].parse().unwrap_or(0);
-            let month: i32 = s[5..7].parse().unwrap_or(0);
-            let day: i32 = s[8..10].parse().unwrap_or(0);
+            let year: i64 = s[0..4].parse().unwrap_or(0);
+            let month: i64 = s[5..7].parse().unwrap_or(0);
+            let day: i64 = s[8..10].parse().unwrap_or(0);
             if (1..=12).contains(&month) && (1..=31).contains(&day) {
-                return Ok(format!(
-                    "{year:04}-{month:02}-{day:02}T00:00:00Z"
-                ));
+                let ts = datetime_to_unix(year, month, day, 0, 0, 0);
+                return Ok(eval.heap().alloc(StarlarkTime::from_unix(ts, 0)));
             }
         }
 
-        Err(anyhow::anyhow!(
-            "cannot parse time string: {s}"
-        ))
+        Err(anyhow::anyhow!("cannot parse time string: {s}"))
     }
 
-    /// Converts a Unix timestamp (seconds) to an ISO 8601 UTC string.
-    fn from_timestamp(ts: i32) -> anyhow::Result<String> {
-        let (year, month, day, hour, min, sec) = unix_to_datetime(ts as i64);
-        Ok(format!(
-            "{year:04}-{month:02}-{day:02}T{hour:02}:{min:02}:{sec:02}Z"
-        ))
+    fn from_timestamp<'v>(
+        ts: i32,
+        eval: &mut Evaluator<'v, '_, '_>,
+    ) -> anyhow::Result<Value<'v>> {
+        Ok(eval.heap().alloc(StarlarkTime::from_unix(ts as i64, 0)))
     }
 
-    /// Parses a Go-style duration string ("5s", "1m30s", "2h").
-    /// Returns milliseconds as an integer.
     fn parse_duration(d: &str) -> anyhow::Result<i32> {
         let nanos = parse_duration_str(d)?;
         Ok((nanos / 1_000_000) as i32)
     }
+
 }
 
 pub fn build_time_globals() -> starlark::environment::Globals {
@@ -75,107 +55,6 @@ pub fn build_time_globals() -> starlark::environment::Globals {
         .build()
 }
 
-/// Parse an ISO 8601 datetime string to Unix timestamp.
-fn parse_iso8601(s: &str) -> Option<i64> {
-    // Minimum: 2006-01-02T15:04:05Z (20 chars)
-    if s.len() < 19 {
-        return None;
-    }
-    let b = s.as_bytes();
-    if b[4] != b'-' || b[7] != b'-' || (b[10] != b'T' && b[10] != b't') || b[13] != b':' || b[16] != b':' {
-        return None;
-    }
-
-    let year: i64 = s[0..4].parse().ok()?;
-    let month: i64 = s[5..7].parse().ok()?;
-    let day: i64 = s[8..10].parse().ok()?;
-    let hour: i64 = s[11..13].parse().ok()?;
-    let min: i64 = s[14..16].parse().ok()?;
-    let sec: i64 = s[17..19].parse().ok()?;
-
-    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
-        return None;
-    }
-    if hour > 23 || min > 59 || sec > 59 {
-        return None;
-    }
-
-    Some(datetime_to_unix(year, month, day, hour, min, sec))
-}
-
-fn datetime_to_unix(year: i64, month: i64, day: i64, hour: i64, min: i64, sec: i64) -> i64 {
-    // Days from 1970-01-01 to the start of the given year
-    let mut days: i64 = 0;
-    if year >= 1970 {
-        for y in 1970..year {
-            days += if is_leap(y) { 366 } else { 365 };
-        }
-    } else {
-        for y in year..1970 {
-            days -= if is_leap(y) { 366 } else { 365 };
-        }
-    }
-
-    let leap = is_leap(year);
-    let month_days: [i64; 12] = [
-        31, if leap { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
-    ];
-    for i in 0..(month - 1) as usize {
-        days += month_days[i];
-    }
-    days += day - 1;
-
-    days * 86400 + hour * 3600 + min * 60 + sec
-}
-
-fn unix_to_datetime(mut ts: i64) -> (i64, i64, i64, i64, i64, i64) {
-    let negative = ts < 0;
-    if negative {
-        // For negative timestamps, we don't fully handle pre-epoch dates,
-        // but at least don't panic
-        ts = 0;
-    }
-
-    let sec = ts % 60;
-    ts /= 60;
-    let min = ts % 60;
-    ts /= 60;
-    let hour = ts % 24;
-    let mut days = ts / 24;
-
-    let mut year = 1970i64;
-    loop {
-        let days_in_year = if is_leap(year) { 366 } else { 365 };
-        if days < days_in_year {
-            break;
-        }
-        days -= days_in_year;
-        year += 1;
-    }
-
-    let leap = is_leap(year);
-    let month_days: [i64; 12] = [
-        31, if leap { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
-    ];
-
-    let mut month = 0i64;
-    for (i, &md) in month_days.iter().enumerate() {
-        if days < md {
-            month = i as i64 + 1;
-            break;
-        }
-        days -= md;
-    }
-    let day = days + 1;
-
-    (year, month, day, hour, min, sec)
-}
-
-fn is_leap(year: i64) -> bool {
-    (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
-}
-
-/// Parse a Go-style duration string. Supports h, m, s, ms, us, ns suffixes.
 fn parse_duration_str(s: &str) -> anyhow::Result<i64> {
     let s = s.trim();
     if s.is_empty() {
@@ -199,7 +78,6 @@ fn parse_duration_str(s: &str) -> anyhow::Result<i64> {
                 .map_err(|_| anyhow::anyhow!("invalid number in duration: {num_buf}"))?;
             num_buf.clear();
 
-            // Collect the unit suffix
             let mut unit = String::new();
             while let Some(&u) = chars.peek() {
                 if u.is_ascii_alphabetic() {
@@ -236,6 +114,7 @@ fn parse_duration_str(s: &str) -> anyhow::Result<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::starlark_time::{parse_iso8601, unix_to_datetime, datetime_to_unix};
 
     #[test]
     fn parse_iso8601_basic() {
@@ -264,5 +143,24 @@ mod tests {
     fn parse_duration_ms() {
         let ns = parse_duration_str("500ms").unwrap();
         assert_eq!(ns, 500_000_000);
+    }
+
+    #[test]
+    fn time_format_go() {
+        let t = StarlarkTime::from_unix(1609459200, 0); // 2021-01-01T00:00:00Z
+        assert_eq!(t.format_go("2006-01-02"), "2021-01-01");
+    }
+
+    #[test]
+    fn time_display() {
+        let t = StarlarkTime::from_unix(0, 0);
+        assert_eq!(t.to_string(), "1970-01-01T00:00:00Z");
+    }
+
+    #[test]
+    fn time_components() {
+        let t = StarlarkTime::from_unix(1609459200, 0);
+        let (y, m, d, h, mi, s) = t.components();
+        assert_eq!((y, m, d, h, mi, s), (2021, 1, 1, 0, 0, 0));
     }
 }

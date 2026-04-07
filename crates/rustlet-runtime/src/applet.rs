@@ -11,6 +11,8 @@ use rustlet_render::Root;
 
 use crate::base64_module::build_base64_globals;
 use crate::color_module::build_color_globals;
+use crate::http_module::build_http_globals;
+use crate::humanize_module::build_humanize_globals;
 use crate::json_module::build_json_globals;
 use crate::math_module::build_math_globals;
 use crate::random_module::build_random_globals;
@@ -62,6 +64,8 @@ impl Applet {
         let math_frozen = build_math_frozen_module()?;
         let random_frozen = build_simple_frozen_module("random", build_random_globals())?;
         let color_frozen = build_simple_frozen_module("color", build_color_globals())?;
+        let humanize_frozen = build_simple_frozen_module("humanize", build_humanize_globals())?;
+        let http_frozen = build_simple_frozen_module("http", build_http_globals())?;
 
         let ast = AstModule::parse(id, src.to_owned(), &Dialect::Standard)
             .map_err(|e| anyhow!("{e}"))?;
@@ -76,6 +80,8 @@ impl Applet {
         modules_map.insert("math.star", &math_frozen);
         modules_map.insert("random.star", &random_frozen);
         modules_map.insert("color.star", &color_frozen);
+        modules_map.insert("humanize.star", &humanize_frozen);
+        modules_map.insert("http.star", &http_frozen);
         let loader = ReturnFileLoader {
             modules: &modules_map,
         };
@@ -324,8 +330,10 @@ mod tests {
             "\n",
             "def main(config):\n",
             "    t = time.now()\n",
+            "    if t.year < 2020:\n",
+            "        fail(\"year too low\")\n",
             "    return render.Root(\n",
-            "        child = render.Text(t),\n",
+            "        child = render.Text(str(t)),\n",
             "    )\n",
         );
         let config = HashMap::new();
@@ -423,10 +431,12 @@ mod tests {
             "\n",
             "def main(config):\n",
             "    t = time.from_timestamp(0)\n",
-            "    if t != \"1970-01-01T00:00:00Z\":\n",
-            "        fail(\"expected epoch, got \" + t)\n",
+            "    if str(t) != \"1970-01-01T00:00:00Z\":\n",
+            "        fail(\"expected epoch, got \" + str(t))\n",
+            "    if t.year != 1970:\n",
+            "        fail(\"expected year 1970\")\n",
             "    return render.Root(\n",
-            "        child = render.Text(t),\n",
+            "        child = render.Text(str(t)),\n",
             "    )\n",
         );
         let config = HashMap::new();
