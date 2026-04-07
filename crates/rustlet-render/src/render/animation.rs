@@ -1,4 +1,4 @@
-use super::{Rect, Widget, mod_int};
+use super::{mod_int, Rect, Widget};
 use tiny_skia::Pixmap;
 
 pub struct Animation {
@@ -49,8 +49,14 @@ mod tests {
     fn animation_cycles() {
         let a = Animation {
             children: vec![
-                Box::new(BoxWidget { color: Some(Color::from_rgba8(255, 0, 0, 255)), ..BoxWidget::new() }),
-                Box::new(BoxWidget { color: Some(Color::from_rgba8(0, 255, 0, 255)), ..BoxWidget::new() }),
+                Box::new(BoxWidget {
+                    color: Some(Color::from_rgba8(255, 0, 0, 255)),
+                    ..BoxWidget::new()
+                }),
+                Box::new(BoxWidget {
+                    color: Some(Color::from_rgba8(0, 255, 0, 255)),
+                    ..BoxWidget::new()
+                }),
             ],
         };
 

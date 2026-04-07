@@ -2,7 +2,7 @@ use starlark::environment::GlobalsBuilder;
 use starlark::eval::Evaluator;
 use starlark::values::Value;
 
-use crate::starlark_time::{StarlarkTime, parse_iso8601, datetime_to_unix};
+use crate::starlark_time::{datetime_to_unix, parse_iso8601, StarlarkTime};
 
 #[starlark::starlark_module]
 pub fn time_module(builder: &mut GlobalsBuilder) {
@@ -35,10 +35,7 @@ pub fn time_module(builder: &mut GlobalsBuilder) {
         Err(anyhow::anyhow!("cannot parse time string: {s}"))
     }
 
-    fn from_timestamp<'v>(
-        ts: i32,
-        eval: &mut Evaluator<'v, '_, '_>,
-    ) -> anyhow::Result<Value<'v>> {
+    fn from_timestamp<'v>(ts: i32, eval: &mut Evaluator<'v, '_, '_>) -> anyhow::Result<Value<'v>> {
         Ok(eval.heap().alloc(StarlarkTime::from_unix(ts as i64, 0)))
     }
 
@@ -125,7 +122,7 @@ fn parse_duration_str(s: &str) -> anyhow::Result<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::starlark_time::{parse_iso8601, unix_to_datetime, datetime_to_unix};
+    use crate::starlark_time::{datetime_to_unix, parse_iso8601, unix_to_datetime};
 
     #[test]
     fn parse_iso8601_basic() {

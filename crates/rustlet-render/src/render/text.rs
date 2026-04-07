@@ -87,7 +87,8 @@ impl Text {
                         if glyph.pixel(col, row) {
                             let px = cursor_x + glyph.x_offset as i32 + col as i32;
                             let py = row as i32;
-                            if px >= 0 && (px as usize) < dst_w && py >= 0 && (py as usize) < dst_h {
+                            if px >= 0 && (px as usize) < dst_w && py >= 0 && (py as usize) < dst_h
+                            {
                                 pixels[py as usize * dst_w + px as usize] = premul;
                             }
                         }
@@ -119,7 +120,11 @@ fn premultiply_color(c: Color) -> PremultipliedColorU8 {
 
 impl Widget for Text {
     fn paint_bounds(&self, _bounds: Rect, _frame_idx: i32) -> Rect {
-        let h = if self.height > 0 { self.height } else { self.rendered_height };
+        let h = if self.height > 0 {
+            self.height
+        } else {
+            self.rendered_height
+        };
         Rect::new(0, 0, self.rendered_width, h)
     }
 
@@ -141,13 +146,19 @@ impl Widget for Text {
 
         for sy in 0..src_h {
             let dy = bounds.y + sy + offset_y;
-            if dy < 0 || dy >= dst_h { continue; }
+            if dy < 0 || dy >= dst_h {
+                continue;
+            }
             for sx in 0..src_w {
                 let dx = bounds.x + sx;
-                if dx < 0 || dx >= dst_w { continue; }
+                if dx < 0 || dx >= dst_w {
+                    continue;
+                }
 
                 let src_pixel = src_pixels[(sy * src_w + sx) as usize];
-                if src_pixel.alpha() == 0 { continue; }
+                if src_pixel.alpha() == 0 {
+                    continue;
+                }
 
                 dst_pixels[(dy * dst_w + dx) as usize] = src_pixel;
             }
@@ -197,7 +208,11 @@ mod tests {
         let t = Text::new("A").with_color(Color::from_rgba8(255, 0, 0, 255));
         let mut pixmap = Pixmap::new(10, 10).unwrap();
         t.paint(&mut pixmap, Rect::new(0, 0, 10, 10), 0);
-        let red_pixels = pixmap.pixels().iter().filter(|p| p.red() == 255 && p.alpha() > 0).count();
+        let red_pixels = pixmap
+            .pixels()
+            .iter()
+            .filter(|p| p.red() == 255 && p.alpha() > 0)
+            .count();
         assert!(red_pixels > 0);
     }
 

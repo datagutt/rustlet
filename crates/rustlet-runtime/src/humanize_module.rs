@@ -569,7 +569,10 @@ pub fn humanize_module(builder: &mut GlobalsBuilder) {
         Ok(day_of_week_from_ts(timestamp as i64))
     }
 
-    fn bytes<'v>(size: Value<'v>, #[starlark(default = false)] iec: bool) -> anyhow::Result<String> {
+    fn bytes<'v>(
+        size: Value<'v>,
+        #[starlark(default = false)] iec: bool,
+    ) -> anyhow::Result<String> {
         let n = to_f64(size)?;
         if iec {
             Ok(format_bytes_iec(n))

@@ -10,10 +10,7 @@ pub fn json_module(builder: &mut GlobalsBuilder) {
         value_to_json(value)
     }
 
-    fn decode<'v>(
-        s: &str,
-        eval: &mut Evaluator<'v, '_, '_>,
-    ) -> anyhow::Result<Value<'v>> {
+    fn decode<'v>(s: &str, eval: &mut Evaluator<'v, '_, '_>) -> anyhow::Result<Value<'v>> {
         let parsed: serde_json::Value =
             serde_json::from_str(s).map_err(|e| anyhow::anyhow!("JSON parse error: {e}"))?;
         json_to_starlark(&parsed, eval.heap())
@@ -49,8 +46,7 @@ fn starlark_to_serde(value: Value) -> anyhow::Result<serde_json::Value> {
     }
 
     if let Some(list) = ListRef::from_value(value) {
-        let arr: Result<Vec<serde_json::Value>, _> =
-            list.iter().map(starlark_to_serde).collect();
+        let arr: Result<Vec<serde_json::Value>, _> = list.iter().map(starlark_to_serde).collect();
         return Ok(serde_json::Value::Array(arr?));
     }
 
@@ -71,10 +67,7 @@ fn starlark_to_serde(value: Value) -> anyhow::Result<serde_json::Value> {
     ))
 }
 
-fn json_to_starlark<'v>(
-    json: &serde_json::Value,
-    heap: &'v Heap,
-) -> anyhow::Result<Value<'v>> {
+fn json_to_starlark<'v>(json: &serde_json::Value, heap: &'v Heap) -> anyhow::Result<Value<'v>> {
     match json {
         serde_json::Value::Null => Ok(Value::new_none()),
         serde_json::Value::Bool(b) => Ok(Value::new_bool(*b)),
@@ -89,10 +82,8 @@ fn json_to_starlark<'v>(
         }
         serde_json::Value::String(s) => Ok(heap.alloc(s.as_str())),
         serde_json::Value::Array(arr) => {
-            let items: Result<Vec<Value<'v>>, _> = arr
-                .iter()
-                .map(|v| json_to_starlark(v, heap))
-                .collect();
+            let items: Result<Vec<Value<'v>>, _> =
+                arr.iter().map(|v| json_to_starlark(v, heap)).collect();
             Ok(heap.alloc(items?))
         }
         serde_json::Value::Object(map) => {

@@ -1,5 +1,5 @@
-use super::{Rect, Widget};
 use super::vector::{CrossAlign, MainAlign, Vector};
+use super::{Rect, Widget};
 use tiny_skia::Pixmap;
 
 pub struct Column {

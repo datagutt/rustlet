@@ -12,7 +12,9 @@ impl Widget for Padding {
     fn paint_bounds(&self, bounds: Rect, frame_idx: i32) -> Rect {
         let inner_w = bounds.width - self.pad.left - self.pad.right;
         let inner_h = bounds.height - self.pad.top - self.pad.bottom;
-        let cb = self.child.paint_bounds(Rect::new(0, 0, inner_w, inner_h), frame_idx);
+        let cb = self
+            .child
+            .paint_bounds(Rect::new(0, 0, inner_w, inner_h), frame_idx);
 
         let (width, height) = if self.expanded {
             (bounds.width, bounds.height)
@@ -29,7 +31,9 @@ impl Widget for Padding {
     fn paint(&self, pixmap: &mut Pixmap, bounds: Rect, frame_idx: i32) {
         let inner_w = bounds.width - self.pad.left - self.pad.right;
         let inner_h = bounds.height - self.pad.top - self.pad.bottom;
-        let cb = self.child.paint_bounds(Rect::new(0, 0, inner_w, inner_h), frame_idx);
+        let cb = self
+            .child
+            .paint_bounds(Rect::new(0, 0, inner_w, inner_h), frame_idx);
 
         let (width, height) = if self.expanded {
             (bounds.width, bounds.height)
@@ -52,7 +56,13 @@ impl Widget for Padding {
                 let mut paint = Paint::default();
                 paint.set_color(color);
                 paint.anti_alias = false;
-                pixmap.fill_path(&path, &paint, FillRule::Winding, Transform::identity(), None);
+                pixmap.fill_path(
+                    &path,
+                    &paint,
+                    FillRule::Winding,
+                    Transform::identity(),
+                    None,
+                );
             }
         }
 

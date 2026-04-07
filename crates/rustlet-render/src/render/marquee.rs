@@ -10,7 +10,11 @@ pub enum ScrollDirection {
 
 impl ScrollDirection {
     pub fn from_str(s: &str) -> Self {
-        if s == "vertical" { Self::Vertical } else { Self::Horizontal }
+        if s == "vertical" {
+            Self::Vertical
+        } else {
+            Self::Horizontal
+        }
     }
 }
 
@@ -51,16 +55,14 @@ impl Marquee {
     /// Measure child in a generous bounding box (10x the marquee size along scroll axis).
     fn child_bounds_and_metrics(&self, bounds: Rect) -> (Rect, i32, i32) {
         let (cb, cw, size) = if self.is_vertical() {
-            let cb = self.child.paint_bounds(
-                Rect::new(0, 0, bounds.width, self.height * 10),
-                0,
-            );
+            let cb = self
+                .child
+                .paint_bounds(Rect::new(0, 0, bounds.width, self.height * 10), 0);
             (cb, cb.height, self.height)
         } else {
-            let cb = self.child.paint_bounds(
-                Rect::new(0, 0, self.width * 10, bounds.height),
-                0,
-            );
+            let cb = self
+                .child
+                .paint_bounds(Rect::new(0, 0, self.width * 10, bounds.height), 0);
             (cb, cb.width, self.width)
         };
         (cb, cw, size)

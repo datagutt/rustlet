@@ -23,4 +23,4 @@ pub use render::starfield::Starfield;
 pub use render::text::Text;
 pub use render::vector::{CrossAlign, MainAlign, Vector};
 pub use render::wrapped_text::{WrapAlign, WrappedText};
-pub use render::{Insets, Rect, Root, Widget, max_frame_count, mod_int};
+pub use render::{max_frame_count, mod_int, Insets, Rect, Root, Widget};

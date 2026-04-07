@@ -158,14 +158,20 @@ impl Widget for WrappedText {
         let line_h = font.measure_height();
         let spacing = self.line_spacing.max(0);
 
-        let wrap_width = if self.width > 0 { self.width } else { bounds.width };
+        let wrap_width = if self.width > 0 {
+            self.width
+        } else {
+            bounds.width
+        };
         let lines = self.wrap_lines(wrap_width);
 
         // Compute actual content width
         let mut max_w = 0;
         for line in &lines {
             let w = font.measure_width(line).min(MAX_TEXT_WIDTH);
-            if w > max_w { max_w = w; }
+            if w > max_w {
+                max_w = w;
+            }
         }
 
         let total_h = if lines.is_empty() {
@@ -198,7 +204,11 @@ impl Widget for WrappedText {
         let line_h = font.measure_height();
         let spacing = self.line_spacing.max(0);
 
-        let wrap_width = if self.width > 0 { self.width } else { bounds.width };
+        let wrap_width = if self.width > 0 {
+            self.width
+        } else {
+            bounds.width
+        };
         let lines = self.wrap_lines(wrap_width);
 
         let premul = premultiply_color(self.color);
@@ -227,8 +237,10 @@ impl Widget for WrappedText {
                             if glyph.pixel(col, row) {
                                 let px = cursor_x + glyph.x_offset as i32 + col as i32;
                                 let py = cursor_y + row as i32;
-                                if px >= 0 && (px as usize) < dst_w
-                                    && py >= 0 && (py as usize) < dst_h
+                                if px >= 0
+                                    && (px as usize) < dst_w
+                                    && py >= 0
+                                    && (py as usize) < dst_h
                                 {
                                     pixels[py as usize * dst_w + px as usize] = premul;
                                 }
@@ -286,7 +298,9 @@ mod tests {
     #[test]
     fn wrap_word_break() {
         // 5px per char, width=15 fits 3 chars
-        let wt = WrappedText::new("abcdef").with_width(15).with_word_break(true);
+        let wt = WrappedText::new("abcdef")
+            .with_width(15)
+            .with_word_break(true);
         let lines = wt.wrap_lines(15);
         assert_eq!(lines.len(), 2);
         assert_eq!(lines[0], "abc");

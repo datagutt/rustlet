@@ -45,8 +45,14 @@ mod tests {
     fn sequence_frame_count() {
         let s = Sequence {
             children: vec![
-                Box::new(BoxWidget { color: Some(Color::from_rgba8(255, 0, 0, 255)), ..BoxWidget::new() }),
-                Box::new(BoxWidget { color: Some(Color::from_rgba8(0, 255, 0, 255)), ..BoxWidget::new() }),
+                Box::new(BoxWidget {
+                    color: Some(Color::from_rgba8(255, 0, 0, 255)),
+                    ..BoxWidget::new()
+                }),
+                Box::new(BoxWidget {
+                    color: Some(Color::from_rgba8(0, 255, 0, 255)),
+                    ..BoxWidget::new()
+                }),
             ],
         };
         // Each box has 1 frame
@@ -57,8 +63,14 @@ mod tests {
     fn sequence_paints_correct_child() {
         let s = Sequence {
             children: vec![
-                Box::new(BoxWidget { color: Some(Color::from_rgba8(255, 0, 0, 255)), ..BoxWidget::new() }),
-                Box::new(BoxWidget { color: Some(Color::from_rgba8(0, 255, 0, 255)), ..BoxWidget::new() }),
+                Box::new(BoxWidget {
+                    color: Some(Color::from_rgba8(255, 0, 0, 255)),
+                    ..BoxWidget::new()
+                }),
+                Box::new(BoxWidget {
+                    color: Some(Color::from_rgba8(0, 255, 0, 255)),
+                    ..BoxWidget::new()
+                }),
             ],
         };
 

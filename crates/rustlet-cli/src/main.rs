@@ -87,16 +87,14 @@ fn main() -> Result<()> {
             };
 
             let src = std::fs::read_to_string(&file)?;
-            let id = file
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("app");
+            let id = file.file_stem().and_then(|s| s.to_str()).unwrap_or("app");
 
             let base_dir = file.parent();
 
             let applet = Applet::new();
             let config = HashMap::new();
-            let roots = applet.run_with_options(id, &src, &config, width, height, is_2x, base_dir)?;
+            let roots =
+                applet.run_with_options(id, &src, &config, width, height, is_2x, base_dir)?;
 
             if roots.is_empty() {
                 bail!("main() returned no roots");

@@ -1,4 +1,4 @@
-use super::{Rect, Widget, max_frame_count};
+use super::{max_frame_count, Rect, Widget};
 use tiny_skia::Pixmap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -93,10 +93,14 @@ fn measure_children(
 
 /// Compute final vector dimensions.
 fn compute_dimensions(
-    sum_w: i32, sum_h: i32,
-    max_w: i32, max_h: i32,
-    bounds_w: i32, bounds_h: i32,
-    dx: i32, dy: i32,
+    sum_w: i32,
+    sum_h: i32,
+    max_w: i32,
+    max_h: i32,
+    bounds_w: i32,
+    bounds_h: i32,
+    dx: i32,
+    dy: i32,
     expanded: bool,
 ) -> (i32, i32) {
     let mut width = dx * sum_w + dy * max_w;
@@ -116,10 +120,25 @@ fn compute_dimensions(
 impl Widget for Vector {
     fn paint_bounds(&self, bounds: Rect, frame_idx: i32) -> Rect {
         let (dx, dy) = if self.vertical { (0, 1) } else { (1, 0) };
-        let (_, sum_w, sum_h, max_w, max_h) =
-            measure_children(&self.children, bounds.width, bounds.height, dx, dy, frame_idx);
-        let (width, height) =
-            compute_dimensions(sum_w, sum_h, max_w, max_h, bounds.width, bounds.height, dx, dy, self.expanded);
+        let (_, sum_w, sum_h, max_w, max_h) = measure_children(
+            &self.children,
+            bounds.width,
+            bounds.height,
+            dx,
+            dy,
+            frame_idx,
+        );
+        let (width, height) = compute_dimensions(
+            sum_w,
+            sum_h,
+            max_w,
+            max_h,
+            bounds.width,
+            bounds.height,
+            dx,
+            dy,
+            self.expanded,
+        );
         Rect::new(0, 0, width, height)
     }
 
@@ -134,8 +153,17 @@ impl Widget for Vector {
         let (_, _, _, max_w, max_h) =
             measure_children(&self.children, bounds_w, bounds_h, dx, dy, frame_idx);
 
-        let (width, height) =
-            compute_dimensions(sum_w, sum_h, max_w, max_h, bounds_w, bounds_h, dx, dy, self.expanded);
+        let (width, height) = compute_dimensions(
+            sum_w,
+            sum_h,
+            max_w,
+            max_h,
+            bounds_w,
+            bounds_h,
+            dx,
+            dy,
+            self.expanded,
+        );
 
         let remaining = (dx * (width - sum_w) + dy * (height - sum_h)).max(0);
 

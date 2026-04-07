@@ -10,10 +10,7 @@ fn to_f64(v: Value) -> anyhow::Result<f64> {
     if let Some(i) = v.unpack_i32() {
         return Ok(i as f64);
     }
-    Err(anyhow::anyhow!(
-        "expected number, got {}",
-        v.get_type()
-    ))
+    Err(anyhow::anyhow!("expected number, got {}", v.get_type()))
 }
 
 #[starlark::starlark_module]

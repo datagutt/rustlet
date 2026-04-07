@@ -47,7 +47,13 @@ impl Widget for Circle {
                 let mut paint = Paint::default();
                 paint.set_color(color);
                 paint.anti_alias = false;
-                pixmap.fill_path(&path, &paint, FillRule::Winding, Transform::identity(), None);
+                pixmap.fill_path(
+                    &path,
+                    &paint,
+                    FillRule::Winding,
+                    Transform::identity(),
+                    None,
+                );
             }
         }
 
@@ -60,12 +66,8 @@ impl Widget for Circle {
             let x = center - (0.5 * cb.width as f64) as i32;
             let y = center - (0.5 * cb.height as f64) as i32;
 
-            let child_draw_bounds = Rect::new(
-                bounds.x + x,
-                bounds.y + y,
-                self.diameter,
-                self.diameter,
-            );
+            let child_draw_bounds =
+                Rect::new(bounds.x + x, bounds.y + y, self.diameter, self.diameter);
             child.paint(pixmap, child_draw_bounds, frame_idx);
         }
     }
@@ -128,9 +130,13 @@ mod tests {
     fn frame_count_delegates_to_child() {
         struct MultiFrame;
         impl Widget for MultiFrame {
-            fn paint_bounds(&self, _: Rect, _: i32) -> Rect { Rect::new(0, 0, 2, 2) }
+            fn paint_bounds(&self, _: Rect, _: i32) -> Rect {
+                Rect::new(0, 0, 2, 2)
+            }
             fn paint(&self, _: &mut Pixmap, _: Rect, _: i32) {}
-            fn frame_count(&self, _: Rect) -> i32 { 5 }
+            fn frame_count(&self, _: Rect) -> i32 {
+                5
+            }
         }
         let c = Circle {
             child: Some(Box::new(MultiFrame)),

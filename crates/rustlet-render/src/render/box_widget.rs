@@ -23,28 +23,47 @@ impl BoxWidget {
 
 impl Widget for BoxWidget {
     fn paint_bounds(&self, bounds: Rect, _frame_idx: i32) -> Rect {
-        let w = if self.width > 0 { self.width } else { bounds.width };
-        let h = if self.height > 0 { self.height } else { bounds.height };
+        let w = if self.width > 0 {
+            self.width
+        } else {
+            bounds.width
+        };
+        let h = if self.height > 0 {
+            self.height
+        } else {
+            bounds.height
+        };
         Rect::new(0, 0, w, h)
     }
 
     fn paint(&self, pixmap: &mut Pixmap, bounds: Rect, frame_idx: i32) {
-        let w = if self.width > 0 { self.width } else { bounds.width };
-        let h = if self.height > 0 { self.height } else { bounds.height };
+        let w = if self.width > 0 {
+            self.width
+        } else {
+            bounds.width
+        };
+        let h = if self.height > 0 {
+            self.height
+        } else {
+            bounds.height
+        };
 
         // Fill background
         if let Some(color) = self.color {
-            if let Some(rect) = tiny_skia::Rect::from_xywh(
-                bounds.x as f32,
-                bounds.y as f32,
-                w as f32,
-                h as f32,
-            ) {
+            if let Some(rect) =
+                tiny_skia::Rect::from_xywh(bounds.x as f32, bounds.y as f32, w as f32, h as f32)
+            {
                 let path = PathBuilder::from_rect(rect);
                 let mut paint = Paint::default();
                 paint.set_color(color);
                 paint.anti_alias = false;
-                pixmap.fill_path(&path, &paint, FillRule::Winding, Transform::identity(), None);
+                pixmap.fill_path(
+                    &path,
+                    &paint,
+                    FillRule::Winding,
+                    Transform::identity(),
+                    None,
+                );
             }
         }
 

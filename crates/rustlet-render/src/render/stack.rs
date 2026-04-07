@@ -1,4 +1,4 @@
-use super::{Rect, Widget, max_frame_count};
+use super::{max_frame_count, Rect, Widget};
 use tiny_skia::Pixmap;
 
 pub struct Stack {

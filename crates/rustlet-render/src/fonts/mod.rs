@@ -132,14 +132,17 @@ fn parse_bdf(src: &str) -> BitmapFont {
                     // Pad or truncate bitmap to expected size
                     bitmap_rows.resize(expected_len, 0);
 
-                    glyphs.insert(ch, Glyph {
-                        width: bbx_w,
-                        height: bbx_h,
-                        x_offset: bbx_xoff,
-                        y_offset: bbx_yoff,
-                        advance: dwidth,
-                        bitmap: bitmap_rows.clone(),
-                    });
+                    glyphs.insert(
+                        ch,
+                        Glyph {
+                            width: bbx_w,
+                            height: bbx_h,
+                            x_offset: bbx_xoff,
+                            y_offset: bbx_yoff,
+                            advance: dwidth,
+                            bitmap: bitmap_rows.clone(),
+                        },
+                    );
                 }
             }
             in_char = false;
@@ -276,8 +279,8 @@ mod tests {
         let g = font.glyph('A').unwrap();
         // tb-8 'A' bitmap row 1 (0-indexed) is 0x60 = 0110_0000
         assert!(!g.pixel(0, 1)); // col 0 off
-        assert!(g.pixel(1, 1));  // col 1 on
-        assert!(g.pixel(2, 1));  // col 2 on
+        assert!(g.pixel(1, 1)); // col 1 on
+        assert!(g.pixel(2, 1)); // col 2 on
         assert!(!g.pixel(3, 1)); // col 3 off
     }
 

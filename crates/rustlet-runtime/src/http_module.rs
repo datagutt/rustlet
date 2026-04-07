@@ -6,8 +6,8 @@ use std::time::Instant;
 use starlark::environment::GlobalsBuilder;
 use starlark::eval::Evaluator;
 use starlark::values::dict::DictRef;
-use starlark::values::Value;
 use starlark::values::none::NoneType;
+use starlark::values::Value;
 
 use crate::starlark_response::StarlarkResponse;
 
@@ -62,14 +62,17 @@ fn put_cached(key: u64, resp: &CachedResponse) {
             let now = Instant::now();
             cache.retain(|_, v| v.expires_at > now);
         }
-        cache.insert(key, CachedResponse {
-            url: resp.url.clone(),
-            status_code: resp.status_code,
-            status: resp.status.clone(),
-            body: resp.body.clone(),
-            headers: resp.headers.clone(),
-            expires_at: resp.expires_at,
-        });
+        cache.insert(
+            key,
+            CachedResponse {
+                url: resp.url.clone(),
+                status_code: resp.status_code,
+                status: resp.status.clone(),
+                body: resp.body.clone(),
+                headers: resp.headers.clone(),
+                expires_at: resp.expires_at,
+            },
+        );
     }
 }
 
@@ -267,7 +270,16 @@ pub fn http_module(builder: &mut GlobalsBuilder) {
         #[starlark(default = 0)] ttl_seconds: i32,
         eval: &mut Evaluator<'v, '_, '_>,
     ) -> anyhow::Result<Value<'v>> {
-        do_request("GET", url, headers, "", Value::new_none(), params, ttl_seconds, eval)
+        do_request(
+            "GET",
+            url,
+            headers,
+            "",
+            Value::new_none(),
+            params,
+            ttl_seconds,
+            eval,
+        )
     }
 
     fn post<'v>(
@@ -279,7 +291,16 @@ pub fn http_module(builder: &mut GlobalsBuilder) {
         #[starlark(default = 0)] ttl_seconds: i32,
         eval: &mut Evaluator<'v, '_, '_>,
     ) -> anyhow::Result<Value<'v>> {
-        do_request("POST", url, headers, body, json_body, params, ttl_seconds, eval)
+        do_request(
+            "POST",
+            url,
+            headers,
+            body,
+            json_body,
+            params,
+            ttl_seconds,
+            eval,
+        )
     }
 
     fn put<'v>(
@@ -291,7 +312,16 @@ pub fn http_module(builder: &mut GlobalsBuilder) {
         #[starlark(default = 0)] ttl_seconds: i32,
         eval: &mut Evaluator<'v, '_, '_>,
     ) -> anyhow::Result<Value<'v>> {
-        do_request("PUT", url, headers, body, json_body, params, ttl_seconds, eval)
+        do_request(
+            "PUT",
+            url,
+            headers,
+            body,
+            json_body,
+            params,
+            ttl_seconds,
+            eval,
+        )
     }
 
     fn delete<'v>(
@@ -301,7 +331,16 @@ pub fn http_module(builder: &mut GlobalsBuilder) {
         #[starlark(default = 0)] ttl_seconds: i32,
         eval: &mut Evaluator<'v, '_, '_>,
     ) -> anyhow::Result<Value<'v>> {
-        do_request("DELETE", url, headers, "", Value::new_none(), params, ttl_seconds, eval)
+        do_request(
+            "DELETE",
+            url,
+            headers,
+            "",
+            Value::new_none(),
+            params,
+            ttl_seconds,
+            eval,
+        )
     }
 
     fn patch<'v>(
@@ -313,7 +352,16 @@ pub fn http_module(builder: &mut GlobalsBuilder) {
         #[starlark(default = 0)] ttl_seconds: i32,
         eval: &mut Evaluator<'v, '_, '_>,
     ) -> anyhow::Result<Value<'v>> {
-        do_request("PATCH", url, headers, body, json_body, params, ttl_seconds, eval)
+        do_request(
+            "PATCH",
+            url,
+            headers,
+            body,
+            json_body,
+            params,
+            ttl_seconds,
+            eval,
+        )
     }
 }
 

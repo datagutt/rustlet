@@ -4,9 +4,7 @@ use std::fmt;
 use allocative::Allocative;
 use starlark::environment::{Methods, MethodsBuilder, MethodsStatic};
 use starlark::starlark_simple_value;
-use starlark::values::{
-    Heap, NoSerialize, ProvidesStaticType, StarlarkValue, Value, ValueLike,
-};
+use starlark::values::{Heap, NoSerialize, ProvidesStaticType, StarlarkValue, Value, ValueLike};
 use starlark_derive::starlark_value;
 
 /// Wraps a config dict with .str(), .bool(), .get() methods like pixlet's config object.
@@ -37,7 +35,9 @@ impl<'v> StarlarkValue<'v> for StarlarkConfig {
             .ok_or_else(|| starlark::Error::new_other(anyhow::anyhow!("key must be a string")))?;
         match self.entries.get(key) {
             Some(v) => Ok(heap.alloc(v.as_str())),
-            None => Err(starlark::Error::new_other(anyhow::anyhow!("key not found: {key}"))),
+            None => Err(starlark::Error::new_other(anyhow::anyhow!(
+                "key not found: {key}"
+            ))),
         }
     }
 }

@@ -40,8 +40,7 @@ impl Root {
                     .expect("pixmap dimensions must be non-zero");
                 // Fill with solid black background (matching Go's solidBackground)
                 for pixel in pixmap.pixels_mut() {
-                    *pixel =
-                        tiny_skia::PremultipliedColorU8::from_rgba(0, 0, 0, 255).unwrap();
+                    *pixel = tiny_skia::PremultipliedColorU8::from_rgba(0, 0, 0, 255).unwrap();
                 }
                 self.child.paint(&mut pixmap, bounds, frame_idx);
                 pixmap

@@ -65,10 +65,18 @@ impl Plot {
         let mut min_y = pt[1];
         let mut max_y = pt[1];
         for pt in &self.data[1..] {
-            if pt[0] < min_x { min_x = pt[0]; }
-            if pt[0] > max_x { max_x = pt[0]; }
-            if pt[1] < min_y { min_y = pt[1]; }
-            if pt[1] > max_y { max_y = pt[1]; }
+            if pt[0] < min_x {
+                min_x = pt[0];
+            }
+            if pt[0] > max_x {
+                max_x = pt[0];
+            }
+            if pt[1] < min_y {
+                min_y = pt[1];
+            }
+            if pt[1] > max_y {
+                max_y = pt[1];
+            }
         }
 
         let mut x_lim_min = x_lim_min_set.unwrap_or(min_x);
@@ -108,16 +116,21 @@ impl Plot {
     fn translate_points(&self) -> (Vec<PathPoint>, i32) {
         let (x_min, x_max, y_min, y_max) = self.compute_limits();
 
-        let points: Vec<PathPoint> = self.data.iter().map(|pt| {
-            let nx = (pt[0] - x_min) / (x_max - x_min);
-            let ny = (pt[1] - y_min) / (y_max - y_min);
-            PathPoint {
-                x: (nx * (self.width - 1) as f64).round() as i32,
-                y: self.height - 1 - (ny * (self.height - 1) as f64).round() as i32,
-            }
-        }).collect();
+        let points: Vec<PathPoint> = self
+            .data
+            .iter()
+            .map(|pt| {
+                let nx = (pt[0] - x_min) / (x_max - x_min);
+                let ny = (pt[1] - y_min) / (y_max - y_min);
+                PathPoint {
+                    x: (nx * (self.width - 1) as f64).round() as i32,
+                    y: self.height - 1 - (ny * (self.height - 1) as f64).round() as i32,
+                }
+            })
+            .collect();
 
-        let inv_threshold = self.height - 1
+        let inv_threshold = self.height
+            - 1
             - ((0.0 - y_min) / (y_max - y_min) * (self.height - 1) as f64).round() as i32;
 
         (points, inv_threshold)
@@ -156,7 +169,9 @@ fn bresenham_line(x0: i32, y0: i32, x1: i32, y1: i32) -> Vec<PathPoint> {
     if dx == 0 {
         loop {
             result.push(PathPoint { x: cx, y: cy });
-            if cy == y1 { break; }
+            if cy == y1 {
+                break;
+            }
             cy += sy;
         }
         return result;
@@ -166,7 +181,9 @@ fn bresenham_line(x0: i32, y0: i32, x1: i32, y1: i32) -> Vec<PathPoint> {
     if dy == 0 {
         loop {
             result.push(PathPoint { x: cx, y: cy });
-            if cx == x1 { break; }
+            if cx == x1 {
+                break;
+            }
             cx += sx;
         }
         return result;
@@ -195,8 +212,10 @@ fn build_polyline(vertices: &[PathPoint]) -> Vec<PathPoint> {
     let mut path = Vec::new();
     for i in 0..vertices.len().saturating_sub(1) {
         let segment = bresenham_line(
-            vertices[i].x, vertices[i].y,
-            vertices[i + 1].x, vertices[i + 1].y,
+            vertices[i].x,
+            vertices[i].y,
+            vertices[i + 1].x,
+            vertices[i + 1].y,
         );
         path.extend_from_slice(&segment);
     }
@@ -216,8 +235,11 @@ impl Widget for Plot {
         let col = self.color;
         let col_inv = self.color_inverted.unwrap_or(col);
 
-        let fill_col = self.fill_color.unwrap_or_else(|| dampen_color(col, FILL_DAMP_FACTOR));
-        let fill_col_inv = self.fill_color_inverted
+        let fill_col = self
+            .fill_color
+            .unwrap_or_else(|| dampen_color(col, FILL_DAMP_FACTOR));
+        let fill_col_inv = self
+            .fill_color_inverted
             .unwrap_or_else(|| dampen_color(col_inv, FILL_DAMP_FACTOR));
 
         let (vertices, inv_threshold) = self.translate_points();
@@ -387,8 +409,16 @@ mod tests {
     fn translate_linear_data() {
         let p = Plot {
             data: vec![
-                [0.0, 0.0], [1.0, 2.0], [2.0, 4.0], [3.0, 6.0], [4.0, 8.0],
-                [5.0, 10.0], [6.0, 12.0], [7.0, 14.0], [8.0, 16.0], [9.0, 18.0],
+                [0.0, 0.0],
+                [1.0, 2.0],
+                [2.0, 4.0],
+                [3.0, 6.0],
+                [4.0, 8.0],
+                [5.0, 10.0],
+                [6.0, 12.0],
+                [7.0, 14.0],
+                [8.0, 16.0],
+                [9.0, 18.0],
             ],
             ..default_plot()
         };

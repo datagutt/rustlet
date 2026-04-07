@@ -5,20 +5,20 @@ pub mod arc;
 pub mod box_widget;
 pub mod circle;
 pub mod column;
+pub mod emoji;
 pub mod image_widget;
 pub mod line;
 pub mod marquee;
 pub mod padding;
-pub mod row;
 pub mod pie_chart;
 pub mod plot;
 pub mod polygon;
+pub mod row;
 pub mod sequence;
 pub mod stack;
 pub mod starfield;
 pub mod text;
 pub mod vector;
-pub mod emoji;
 pub mod wrapped_text;
 
 pub use root::Root;
@@ -34,7 +34,12 @@ pub struct Rect {
 
 impl Rect {
     pub fn new(x: i32, y: i32, width: i32, height: i32) -> Self {
-        Self { x, y, width, height }
+        Self {
+            x,
+            y,
+            width,
+            height,
+        }
     }
 
     pub fn is_empty(&self) -> bool {
@@ -76,11 +81,21 @@ pub struct Insets {
 
 impl Insets {
     pub fn new(left: i32, top: i32, right: i32, bottom: i32) -> Self {
-        Self { left, top, right, bottom }
+        Self {
+            left,
+            top,
+            right,
+            bottom,
+        }
     }
 
     pub fn uniform(value: i32) -> Self {
-        Self { left: value, top: value, right: value, bottom: value }
+        Self {
+            left: value,
+            top: value,
+            right: value,
+            bottom: value,
+        }
     }
 }
 
@@ -116,7 +131,11 @@ pub fn mod_int(a: i32, m: i32) -> i32 {
 
 /// Returns the maximum frame count among a slice of widgets.
 pub fn max_frame_count(widgets: &[Box<dyn Widget>], bounds: Rect) -> i32 {
-    widgets.iter().map(|w| w.frame_count(bounds)).max().unwrap_or(1)
+    widgets
+        .iter()
+        .map(|w| w.frame_count(bounds))
+        .max()
+        .unwrap_or(1)
 }
 
 #[cfg(test)]
@@ -187,9 +206,13 @@ mod tests {
     fn widget_is_object_safe() {
         struct Dummy;
         impl Widget for Dummy {
-            fn paint_bounds(&self, bounds: Rect, _: i32) -> Rect { bounds }
+            fn paint_bounds(&self, bounds: Rect, _: i32) -> Rect {
+                bounds
+            }
             fn paint(&self, _: &mut tiny_skia::Pixmap, _: Rect, _: i32) {}
-            fn frame_count(&self, _: Rect) -> i32 { 1 }
+            fn frame_count(&self, _: Rect) -> i32 {
+                1
+            }
         }
         let _: Box<dyn Widget> = Box::new(Dummy);
     }

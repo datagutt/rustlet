@@ -1,6 +1,6 @@
 use super::{Rect, Widget};
-use tiny_skia::{Color, FillRule, Paint, PathBuilder, Pixmap, Transform};
 use std::f32::consts::PI;
+use tiny_skia::{Color, FillRule, Paint, PathBuilder, Pixmap, Transform};
 
 pub struct PieChart {
     pub colors: Vec<Color>,
@@ -66,7 +66,13 @@ impl Widget for PieChart {
                 let mut paint = Paint::default();
                 paint.set_color(color);
                 paint.anti_alias = false;
-                pixmap.fill_path(&path, &paint, FillRule::Winding, Transform::identity(), None);
+                pixmap.fill_path(
+                    &path,
+                    &paint,
+                    FillRule::Winding,
+                    Transform::identity(),
+                    None,
+                );
             }
 
             start = end;
@@ -143,8 +149,16 @@ mod tests {
         };
         let mut pixmap = Pixmap::new(20, 20).unwrap();
         pc.paint(&mut pixmap, Rect::new(0, 0, 20, 20), 0);
-        let red = pixmap.pixels().iter().filter(|p| p.red() > 0 && p.green() == 0).count();
-        let green = pixmap.pixels().iter().filter(|p| p.green() > 0 && p.red() == 0).count();
+        let red = pixmap
+            .pixels()
+            .iter()
+            .filter(|p| p.red() > 0 && p.green() == 0)
+            .count();
+        let green = pixmap
+            .pixels()
+            .iter()
+            .filter(|p| p.green() > 0 && p.red() == 0)
+            .count();
         assert!(red > 0, "should have red pixels");
         assert!(green > 0, "should have green pixels");
     }

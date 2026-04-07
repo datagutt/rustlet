@@ -20,10 +20,18 @@ impl Polygon {
         let mut max_y = f64::NEG_INFINITY;
 
         for &(x, y) in &self.vertices {
-            if x < min_x { min_x = x; }
-            if x > max_x { max_x = x; }
-            if y < min_y { min_y = y; }
-            if y > max_y { max_y = y; }
+            if x < min_x {
+                min_x = x;
+            }
+            if x > max_x {
+                max_x = x;
+            }
+            if y < min_y {
+                min_y = y;
+            }
+            if y > max_y {
+                max_y = y;
+            }
         }
 
         if self.stroke_color.is_some() && self.stroke_width > 0.0 {
@@ -95,7 +103,13 @@ impl Widget for Polygon {
             let mut paint = Paint::default();
             paint.set_color(fill_color);
             paint.anti_alias = false;
-            pixmap.fill_path(&path, &paint, FillRule::Winding, Transform::identity(), None);
+            pixmap.fill_path(
+                &path,
+                &paint,
+                FillRule::Winding,
+                Transform::identity(),
+                None,
+            );
         }
 
         if let Some(stroke_color) = self.stroke_color {
@@ -183,9 +197,7 @@ mod tests {
     #[test]
     fn fill_rectangle_paints() {
         let p = Polygon {
-            vertices: vec![
-                (0.0, 0.0), (9.0, 0.0), (9.0, 9.0), (0.0, 9.0),
-            ],
+            vertices: vec![(0.0, 0.0), (9.0, 0.0), (9.0, 9.0), (0.0, 9.0)],
             fill_color: Some(Color::from_rgba8(255, 0, 0, 255)),
             stroke_color: None,
             stroke_width: 0.0,
@@ -199,9 +211,7 @@ mod tests {
     #[test]
     fn stroke_only_paints() {
         let p = Polygon {
-            vertices: vec![
-                (1.0, 1.0), (8.0, 1.0), (8.0, 8.0), (1.0, 8.0),
-            ],
+            vertices: vec![(1.0, 1.0), (8.0, 1.0), (8.0, 8.0), (1.0, 8.0)],
             fill_color: None,
             stroke_color: Some(Color::from_rgba8(0, 255, 0, 255)),
             stroke_width: 1.0,

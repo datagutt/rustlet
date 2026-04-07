@@ -18,7 +18,12 @@ impl Line {
         let max_y = self.y1.max(self.y2);
 
         let half_w = self.width / 2.0;
-        (min_x - half_w, max_x + half_w, min_y - half_w, max_y + half_w)
+        (
+            min_x - half_w,
+            max_x + half_w,
+            min_y - half_w,
+            max_y + half_w,
+        )
     }
 }
 

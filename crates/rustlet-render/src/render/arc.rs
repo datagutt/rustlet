@@ -28,7 +28,11 @@ impl Arc {
         // Check cardinal angles to see if the arc spans them
         let norm = |angle: f32| {
             let a = angle % (2.0 * std::f32::consts::PI);
-            if a < 0.0 { a + 2.0 * std::f32::consts::PI } else { a }
+            if a < 0.0 {
+                a + 2.0 * std::f32::consts::PI
+            } else {
+                a
+            }
         };
 
         let norm_start = norm(self.start_angle);
@@ -59,7 +63,12 @@ impl Arc {
         }
 
         let half_w = self.width / 2.0;
-        (min_x - half_w, max_x + half_w, min_y - half_w, max_y + half_w)
+        (
+            min_x - half_w,
+            max_x + half_w,
+            min_y - half_w,
+            max_y + half_w,
+        )
     }
 
     fn build_path(&self, offset_x: f32, offset_y: f32) -> Option<tiny_skia::Path> {

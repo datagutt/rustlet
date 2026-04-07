@@ -1,6 +1,6 @@
 use std::path::Path;
-use std::sync::OnceLock;
 use std::sync::Mutex;
+use std::sync::OnceLock;
 
 use super::{Rect, Widget};
 use tiny_skia::Pixmap;

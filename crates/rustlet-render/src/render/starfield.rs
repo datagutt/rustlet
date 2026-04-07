@@ -32,21 +32,26 @@ impl Starfield {
         let mut seed: u64 = 42;
         let mut stars = Vec::with_capacity(NUM_LAYERS * STARS_PER_LAYER);
 
-        let layers: [(f64, u8); NUM_LAYERS] = [
-            (0.5, 80),
-            (1.0, 160),
-            (2.0, 255),
-        ];
+        let layers: [(f64, u8); NUM_LAYERS] = [(0.5, 80), (1.0, 160), (2.0, 255)];
 
         for &(speed, brightness) in &layers {
             for _ in 0..STARS_PER_LAYER {
                 let x = (xorshift64(&mut seed) % width as u64) as f64;
                 let y = (xorshift64(&mut seed) % height as u64) as f64;
-                stars.push(Star { x, y, speed, brightness });
+                stars.push(Star {
+                    x,
+                    y,
+                    speed,
+                    brightness,
+                });
             }
         }
 
-        Self { stars, width, height }
+        Self {
+            stars,
+            width,
+            height,
+        }
     }
 }
 
@@ -61,7 +66,11 @@ impl Widget for Starfield {
         for star in &self.stars {
             let shifted_x = (star.x + star.speed * frame_idx as f64) % w;
             // Handle negative modulo (shouldn't happen with positive values, but be safe)
-            let px = if shifted_x < 0.0 { shifted_x + w } else { shifted_x } as i32;
+            let px = if shifted_x < 0.0 {
+                shifted_x + w
+            } else {
+                shifted_x
+            } as i32;
             let py = star.y as i32;
 
             let abs_x = bounds.x + px;
@@ -82,7 +91,7 @@ impl Widget for Starfield {
             if base + 3 < pixels.len() {
                 // Premultiply: white (255,255,255) with alpha = brightness
                 let a = star.brightness;
-                pixels[base] = a;     // R (premultiplied)
+                pixels[base] = a; // R (premultiplied)
                 pixels[base + 1] = a; // G (premultiplied)
                 pixels[base + 2] = a; // B (premultiplied)
                 pixels[base + 3] = a; // A
@@ -142,7 +151,10 @@ mod tests {
         sf.paint(&mut pm, bounds, 0);
 
         let has_nonzero = pm.data().iter().any(|&b| b != 0);
-        assert!(has_nonzero, "expected some non-zero pixels after painting starfield");
+        assert!(
+            has_nonzero,
+            "expected some non-zero pixels after painting starfield"
+        );
     }
 
     #[test]

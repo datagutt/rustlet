@@ -35,13 +35,19 @@ impl<'v> StarlarkValue<'v> for StarlarkResponse {
     }
 
     fn has_attr(&self, attribute: &str, _heap: &'v Heap) -> bool {
-        matches!(attribute, "url" | "status_code" | "status" | "headers" | "encoding")
+        matches!(
+            attribute,
+            "url" | "status_code" | "status" | "headers" | "encoding"
+        )
     }
 
     fn dir_attr(&self) -> Vec<String> {
         vec![
-            "url".into(), "status_code".into(), "status".into(),
-            "headers".into(), "encoding".into(),
+            "url".into(),
+            "status_code".into(),
+            "status".into(),
+            "headers".into(),
+            "encoding".into(),
         ]
     }
 
@@ -50,11 +56,9 @@ impl<'v> StarlarkValue<'v> for StarlarkResponse {
             "url" => Some(heap.alloc(self.url.as_str())),
             "status_code" => Some(heap.alloc(self.status_code as i32)),
             "status" => Some(heap.alloc(self.status.as_str())),
-            "headers" => {
-                Some(heap.alloc(AllocDict(
-                    self.headers.iter().map(|(k, v)| (k.as_str(), v.as_str())),
-                )))
-            }
+            "headers" => Some(heap.alloc(AllocDict(
+                self.headers.iter().map(|(k, v)| (k.as_str(), v.as_str())),
+            ))),
             "encoding" => Some(heap.alloc("")),
             _ => None,
         }
@@ -85,8 +89,8 @@ fn response_methods(builder: &mut MethodsBuilder) {
 }
 
 fn json_to_starlark<'v>(s: &str, heap: &'v Heap) -> anyhow::Result<Value<'v>> {
-    let parsed: serde_json::Value = serde_json::from_str(s)
-        .map_err(|e| anyhow::anyhow!("JSON parse error: {e}"))?;
+    let parsed: serde_json::Value =
+        serde_json::from_str(s).map_err(|e| anyhow::anyhow!("JSON parse error: {e}"))?;
     Ok(json_value_to_starlark(&parsed, heap))
 }
 
@@ -103,7 +107,10 @@ fn json_value_to_starlark<'v>(val: &serde_json::Value, heap: &'v Heap) -> Value<
         }
         serde_json::Value::String(s) => heap.alloc(s.as_str()),
         serde_json::Value::Array(arr) => {
-            let items: Vec<Value<'v>> = arr.iter().map(|v| json_value_to_starlark(v, heap)).collect();
+            let items: Vec<Value<'v>> = arr
+                .iter()
+                .map(|v| json_value_to_starlark(v, heap))
+                .collect();
             heap.alloc(items)
         }
         serde_json::Value::Object(obj) => {
