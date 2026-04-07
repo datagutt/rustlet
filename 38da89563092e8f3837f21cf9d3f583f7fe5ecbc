@@ -1,0 +1,27 @@
+crates/rustlet-cli/src/main.rs
+  f84287449064e176 1-105
+crates/rustlet-render/src/render/root.rs
+  f84287449064e176 3,5
+examples/hello_world.star
+  f84287449064e176 1-16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "38da89563092e8f3837f21cf9d3f583f7fe5ecbc",
+  "prompts": {
+    "f84287449064e176": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7016a025-6337-44ca-aa46-e2c499c476fc",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "datagutt",
+      "messages": [],
+      "total_additions": 123,
+      "total_deletions": 2,
+      "accepted_lines": 123,
+      "overriden_lines": 0
+    }
+  }
+}
