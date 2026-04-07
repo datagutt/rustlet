@@ -15,6 +15,7 @@ pub mod plot;
 pub mod polygon;
 pub mod sequence;
 pub mod stack;
+pub mod starfield;
 pub mod text;
 pub mod vector;
 pub mod wrapped_text;

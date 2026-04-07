@@ -18,6 +18,7 @@ pub use render::polygon::Polygon;
 pub use render::row::Row;
 pub use render::sequence::Sequence;
 pub use render::stack::Stack;
+pub use render::starfield::Starfield;
 pub use render::text::Text;
 pub use render::vector::{CrossAlign, MainAlign, Vector};
 pub use render::wrapped_text::{WrapAlign, WrappedText};
