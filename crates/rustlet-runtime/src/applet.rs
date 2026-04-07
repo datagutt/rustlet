@@ -15,6 +15,7 @@ use crate::json_module::build_json_globals;
 use crate::math_module::build_math_globals;
 use crate::random_module::build_random_globals;
 use crate::render_module::build_render_globals;
+use crate::starlark_canvas::StarlarkCanvas;
 use crate::starlark_widgets::StarlarkWidget;
 use crate::time_module::build_time_globals;
 
@@ -42,7 +43,19 @@ impl Applet {
         width: u32,
         height: u32,
     ) -> Result<Vec<Root>> {
-        let render_frozen = build_render_frozen_module(width, height)?;
+        self.run_with_options(id, src, config, width, height, false)
+    }
+
+    pub fn run_with_options(
+        &self,
+        id: &str,
+        src: &str,
+        config: &HashMap<String, String>,
+        width: u32,
+        height: u32,
+        is_2x: bool,
+    ) -> Result<Vec<Root>> {
+        let render_frozen = build_render_frozen_module(width, height, is_2x)?;
         let time_frozen = build_simple_frozen_module("time", build_time_globals())?;
         let base64_frozen = build_simple_frozen_module("base64", build_base64_globals())?;
         let json_frozen = build_simple_frozen_module("json", build_json_globals())?;
@@ -90,7 +103,7 @@ impl Applet {
 
 /// Build a FrozenModule for "render.star" that exports a single `render` symbol
 /// containing all widget constructors plus canvas constants.
-fn build_render_frozen_module(width: u32, height: u32) -> Result<FrozenModule> {
+fn build_render_frozen_module(width: u32, height: u32, is_2x: bool) -> Result<FrozenModule> {
     let render_globals = build_render_globals();
 
     let module = Module::new();
@@ -107,6 +120,13 @@ fn build_render_frozen_module(width: u32, height: u32) -> Result<FrozenModule> {
 
     let render_struct = heap.alloc(AllocStruct(entries));
     module.set("render", render_struct);
+
+    let canvas = heap.alloc(StarlarkCanvas {
+        width: width as i32,
+        height: height as i32,
+        is_2x,
+    });
+    module.set("canvas", canvas);
 
     module
         .freeze()

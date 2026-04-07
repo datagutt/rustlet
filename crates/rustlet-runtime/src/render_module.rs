@@ -2,6 +2,7 @@ use starlark::eval::Evaluator;
 use starlark::environment::GlobalsBuilder;
 use starlark::values::list::ListRef;
 use starlark::values::none::NoneType;
+use starlark::values::tuple::TupleRef;
 use starlark::values::Value;
 
 use rustlet_render::{
@@ -49,6 +50,28 @@ fn extract_child(child_val: Value) -> anyhow::Result<Box<dyn Widget>> {
 /// Extract an optional color from a Starlark Value (string, Color object, or None).
 fn extract_color(v: Value) -> anyhow::Result<Option<tiny_skia::Color>> {
     StarlarkColor::color_from_value(v)
+}
+
+/// Extract Insets from a Starlark Value: int (uniform), tuple of 4 ints, or None (zero).
+fn extract_insets(v: Value) -> anyhow::Result<Insets> {
+    if v.is_none() {
+        return Ok(Insets::uniform(0));
+    }
+    if let Some(n) = v.unpack_i32() {
+        return Ok(Insets::uniform(n));
+    }
+    if let Some(t) = TupleRef::from_value(v) {
+        let c = t.content();
+        if c.len() != 4 {
+            return Err(anyhow::anyhow!("pad tuple must have 4 elements, got {}", c.len()));
+        }
+        let left = c[0].unpack_i32().ok_or_else(|| anyhow::anyhow!("pad tuple values must be int"))?;
+        let top = c[1].unpack_i32().ok_or_else(|| anyhow::anyhow!("pad tuple values must be int"))?;
+        let right = c[2].unpack_i32().ok_or_else(|| anyhow::anyhow!("pad tuple values must be int"))?;
+        let bottom = c[3].unpack_i32().ok_or_else(|| anyhow::anyhow!("pad tuple values must be int"))?;
+        return Ok(Insets::new(left, top, right, bottom));
+    }
+    Err(anyhow::anyhow!("pad must be an int or tuple of 4 ints, got {}", v.get_type()))
 }
 
 #[starlark::starlark_module]
@@ -157,14 +180,15 @@ pub fn render_module(builder: &mut GlobalsBuilder) {
 
     fn Padding<'v>(
         child: Value<'v>,
-        #[starlark(default = 0)] pad: i32,
+        #[starlark(default = NoneType)] pad: Value<'v>,
         #[starlark(default = false)] expanded: bool,
         #[starlark(default = NoneType)] color: Value<'v>,
         eval: &mut Evaluator<'v, '_, '_>,
     ) -> anyhow::Result<Value<'v>> {
+        let insets = extract_insets(pad)?;
         let widget = Padding {
             child: extract_child(child)?,
-            pad: Insets::uniform(pad),
+            pad: insets,
             expanded,
             color: extract_color(color)?,
         };
