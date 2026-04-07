@@ -1,0 +1,27 @@
+crates/rustlet-render/src/lib.rs
+  f84287449064e176 21
+crates/rustlet-render/src/render/starfield.rs
+  f84287449064e176 1-168
+crates/rustlet-render/src/render/mod.rs
+  f84287449064e176 18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "c873358fb8e3e6bdd6a54f99505abfb83f03aac3",
+  "prompts": {
+    "f84287449064e176": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7016a025-6337-44ca-aa46-e2c499c476fc",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "datagutt",
+      "messages": [],
+      "total_additions": 171,
+      "total_deletions": 1,
+      "accepted_lines": 170,
+      "overriden_lines": 0
+    }
+  }
+}
