@@ -2,6 +2,8 @@ mod starlark_widgets;
 mod starlark_color;
 mod starlark_canvas;
 mod starlark_config;
+mod starlark_response;
+mod starlark_file;
 pub mod starlark_time;
 mod render_module;
 mod color_module;

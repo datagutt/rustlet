@@ -21,6 +21,7 @@ use crate::render_module::build_render_globals;
 use crate::schema_module::build_schema_globals;
 use crate::starlark_canvas::StarlarkCanvas;
 use crate::starlark_config::StarlarkConfig;
+use crate::starlark_file::StarlarkFile;
 use crate::starlark_widgets::StarlarkWidget;
 use crate::time_module::build_time_globals;
 
@@ -265,7 +266,7 @@ fn build_asset_frozen_module(file_path: &Path) -> Result<FrozenModule> {
 
     let module = Module::new();
     let heap = module.heap();
-    module.set("file", heap.alloc(encoded.as_str()));
+    module.set("file", heap.alloc(StarlarkFile { data: encoded }));
 
     module
         .freeze()

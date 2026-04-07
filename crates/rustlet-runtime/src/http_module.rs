@@ -3,14 +3,13 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::{LazyLock, Mutex};
 use std::time::Instant;
 
-use ureq::http;
-
 use starlark::environment::GlobalsBuilder;
 use starlark::eval::Evaluator;
-use starlark::values::dict::{AllocDict, DictRef};
-use starlark::values::structs::AllocStruct;
+use starlark::values::dict::DictRef;
 use starlark::values::Value;
 use starlark::values::none::NoneType;
+
+use crate::starlark_response::StarlarkResponse;
 
 // --- cache ---
 
@@ -101,17 +100,13 @@ fn alloc_cached_response<'v>(
     cached: &CachedResponse,
     eval: &mut Evaluator<'v, '_, '_>,
 ) -> Value<'v> {
-    let heap = eval.heap();
-    let headers_dict = heap.alloc(AllocDict(
-        cached.headers.iter().map(|(k, v)| (k.as_str(), v.as_str())),
-    ));
-    heap.alloc(AllocStruct([
-        ("url", heap.alloc(cached.url.as_str())),
-        ("status_code", heap.alloc(cached.status_code as i32)),
-        ("status", heap.alloc(cached.status.as_str())),
-        ("body", heap.alloc(cached.body.as_str())),
-        ("headers", headers_dict),
-    ]))
+    eval.heap().alloc(StarlarkResponse {
+        url: cached.url.clone(),
+        status_code: cached.status_code,
+        status: cached.status.clone(),
+        body: cached.body.clone(),
+        headers: cached.headers.clone(),
+    })
 }
 
 fn do_request<'v>(
@@ -199,7 +194,6 @@ fn do_request<'v>(
 
             let resp_body = res.into_body().read_to_string()?;
 
-            // Store in cache if ttl > 0
             if ttl_seconds > 0 {
                 let cached = CachedResponse {
                     url: final_url.clone(),
@@ -212,18 +206,13 @@ fn do_request<'v>(
                 put_cached(key, &cached);
             }
 
-            let heap = eval.heap();
-            let headers_dict = heap.alloc(AllocDict(
-                resp_headers.iter().map(|(k, v)| (k.as_str(), v.as_str())),
-            ));
-            let resp = heap.alloc(AllocStruct([
-                ("url", heap.alloc(final_url.as_str())),
-                ("status_code", heap.alloc(status_code as i32)),
-                ("status", heap.alloc(status.as_str())),
-                ("body", heap.alloc(resp_body.as_str())),
-                ("headers", headers_dict),
-            ]));
-            Ok(resp)
+            Ok(eval.heap().alloc(StarlarkResponse {
+                url: final_url,
+                status_code,
+                status,
+                body: resp_body,
+                headers: resp_headers,
+            }))
         }
         Err(e) => Err(anyhow::anyhow!("HTTP request failed: {e}")),
     }
