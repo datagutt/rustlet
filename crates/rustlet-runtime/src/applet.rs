@@ -9,8 +9,13 @@ use starlark::values::structs::AllocStruct;
 
 use rustlet_render::Root;
 
+use crate::base64_module::build_base64_globals;
+use crate::json_module::build_json_globals;
+use crate::math_module::build_math_globals;
+use crate::random_module::build_random_globals;
 use crate::render_module::build_render_globals;
 use crate::starlark_widgets::StarlarkWidget;
+use crate::time_module::build_time_globals;
 
 pub struct Applet {
     globals: Globals,
@@ -33,8 +38,15 @@ impl Applet {
         id: &str,
         src: &str,
         config: &HashMap<String, String>,
+        width: u32,
+        height: u32,
     ) -> Result<Vec<Root>> {
-        let render_frozen = build_render_frozen_module()?;
+        let render_frozen = build_render_frozen_module(width, height)?;
+        let time_frozen = build_simple_frozen_module("time", build_time_globals())?;
+        let base64_frozen = build_simple_frozen_module("base64", build_base64_globals())?;
+        let json_frozen = build_simple_frozen_module("json", build_json_globals())?;
+        let math_frozen = build_math_frozen_module()?;
+        let random_frozen = build_simple_frozen_module("random", build_random_globals())?;
 
         let ast = AstModule::parse(id, src.to_owned(), &Dialect::Standard)
             .map_err(|e| anyhow!("{e}"))?;
@@ -43,6 +55,11 @@ impl Applet {
 
         let mut modules_map: HashMap<&str, &FrozenModule> = HashMap::new();
         modules_map.insert("render.star", &render_frozen);
+        modules_map.insert("time.star", &time_frozen);
+        modules_map.insert("encoding/base64.star", &base64_frozen);
+        modules_map.insert("encoding/json.star", &json_frozen);
+        modules_map.insert("math.star", &math_frozen);
+        modules_map.insert("random.star", &random_frozen);
         let loader = ReturnFileLoader {
             modules: &modules_map,
         };
@@ -69,19 +86,21 @@ impl Applet {
 }
 
 /// Build a FrozenModule for "render.star" that exports a single `render` symbol
-/// containing all widget constructors as attributes.
-fn build_render_frozen_module() -> Result<FrozenModule> {
+/// containing all widget constructors plus canvas constants.
+fn build_render_frozen_module(width: u32, height: u32) -> Result<FrozenModule> {
     let render_globals = build_render_globals();
 
-    // Create a module with a `render` struct containing all constructors
     let module = Module::new();
     let heap = module.heap();
 
-    // Collect all globals into a struct value
-    let entries: Vec<(&str, starlark::values::Value)> = render_globals
+    let mut entries: Vec<(&str, starlark::values::Value)> = render_globals
         .iter()
         .map(|(name, val)| (name, val.to_value()))
         .collect();
+
+    // Inject canvas constants
+    entries.push(("CANVAS_WIDTH", heap.alloc(width as i32)));
+    entries.push(("CANVAS_HEIGHT", heap.alloc(height as i32)));
 
     let render_struct = heap.alloc(AllocStruct(entries));
     module.set("render", render_struct);
@@ -89,6 +108,50 @@ fn build_render_frozen_module() -> Result<FrozenModule> {
     module
         .freeze()
         .map_err(|e| anyhow!("failed to freeze render module: {e:?}"))
+}
+
+/// Build a FrozenModule that exports a single named symbol wrapping all
+/// functions from the given Globals as struct attributes.
+fn build_simple_frozen_module(name: &str, globals: starlark::environment::Globals) -> Result<FrozenModule> {
+    let module = Module::new();
+    let heap = module.heap();
+
+    let entries: Vec<(&str, starlark::values::Value)> = globals
+        .iter()
+        .map(|(n, val)| (n, val.to_value()))
+        .collect();
+
+    let struct_val = heap.alloc(AllocStruct(entries));
+    module.set(name, struct_val);
+
+    module
+        .freeze()
+        .map_err(|e| anyhow!("failed to freeze {name} module: {e:?}"))
+}
+
+/// Build math module with float constants alongside functions.
+fn build_math_frozen_module() -> Result<FrozenModule> {
+    use starlark::values::float::StarlarkFloat;
+
+    let math_globals = build_math_globals();
+
+    let module = Module::new();
+    let heap = module.heap();
+
+    let mut entries: Vec<(&str, starlark::values::Value)> = math_globals
+        .iter()
+        .map(|(name, val)| (name, val.to_value()))
+        .collect();
+
+    entries.push(("pi", heap.alloc(StarlarkFloat(std::f64::consts::PI))));
+    entries.push(("e", heap.alloc(StarlarkFloat(std::f64::consts::E))));
+
+    let struct_val = heap.alloc(AllocStruct(entries));
+    module.set("math", struct_val);
+
+    module
+        .freeze()
+        .map_err(|e| anyhow!("failed to freeze math module: {e:?}"))
 }
 
 /// Convert a Starlark return value (single Root widget or list of them) into Vec<Root>.
@@ -148,7 +211,7 @@ mod tests {
             "    )\n",
         );
         let config = HashMap::new();
-        let roots = applet.run("test.star", src, &config).unwrap();
+        let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
         assert_eq!(roots.len(), 1);
     }
 
@@ -164,7 +227,7 @@ mod tests {
             "    )\n",
         );
         let config = HashMap::new();
-        let roots = applet.run("test.star", src, &config).unwrap();
+        let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
         assert_eq!(roots.len(), 1);
     }
 
@@ -185,7 +248,7 @@ mod tests {
             "    )\n",
         );
         let config = HashMap::new();
-        let roots = applet.run("test.star", src, &config).unwrap();
+        let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
         assert_eq!(roots.len(), 1);
     }
 
@@ -198,7 +261,7 @@ mod tests {
             "x = 42\n",
         );
         let config = HashMap::new();
-        let result = applet.run("test.star", src, &config);
+        let result = applet.run("test.star", src, &config, 64, 32);
         match result {
             Ok(_) => panic!("expected error for missing main"),
             Err(e) => {
@@ -209,5 +272,162 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn canvas_constants() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"render.star\", \"render\")\n",
+            "\n",
+            "def main(config):\n",
+            "    w = render.CANVAS_WIDTH\n",
+            "    h = render.CANVAS_HEIGHT\n",
+            "    return render.Root(\n",
+            "        child = render.Text(str(w) + \"x\" + str(h)),\n",
+            "    )\n",
+        );
+        let config = HashMap::new();
+        let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn time_now() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"time.star\", \"time\")\n",
+            "load(\"render.star\", \"render\")\n",
+            "\n",
+            "def main(config):\n",
+            "    t = time.now()\n",
+            "    return render.Root(\n",
+            "        child = render.Text(t),\n",
+            "    )\n",
+        );
+        let config = HashMap::new();
+        let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn base64_round_trip() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"encoding/base64.star\", \"base64\")\n",
+            "load(\"render.star\", \"render\")\n",
+            "\n",
+            "def main(config):\n",
+            "    encoded = base64.encode(\"hello world\")\n",
+            "    decoded = base64.decode(encoded)\n",
+            "    if decoded != \"hello world\":\n",
+            "        fail(\"round-trip failed: \" + decoded)\n",
+            "    return render.Root(\n",
+            "        child = render.Text(decoded),\n",
+            "    )\n",
+        );
+        let config = HashMap::new();
+        let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn math_pow() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"math.star\", \"math\")\n",
+            "load(\"render.star\", \"render\")\n",
+            "\n",
+            "def main(config):\n",
+            "    result = math.pow(2, 10)\n",
+            "    if result != 1024:\n",
+            "        fail(\"expected 1024, got \" + str(result))\n",
+            "    return render.Root(\n",
+            "        child = render.Text(str(result)),\n",
+            "    )\n",
+        );
+        let config = HashMap::new();
+        let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn random_number() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"random.star\", \"random\")\n",
+            "load(\"render.star\", \"render\")\n",
+            "\n",
+            "def main(config):\n",
+            "    n = random.number(1, 100)\n",
+            "    if n < 1 or n > 100:\n",
+            "        fail(\"out of range: \" + str(n))\n",
+            "    return render.Root(\n",
+            "        child = render.Text(str(n)),\n",
+            "    )\n",
+        );
+        let config = HashMap::new();
+        let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn json_round_trip() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"encoding/json.star\", \"json\")\n",
+            "load(\"render.star\", \"render\")\n",
+            "\n",
+            "def main(config):\n",
+            "    data = json.decode('{\"key\": \"value\"}')\n",
+            "    if data[\"key\"] != \"value\":\n",
+            "        fail(\"decode failed\")\n",
+            "    return render.Root(\n",
+            "        child = render.Text(data[\"key\"]),\n",
+            "    )\n",
+        );
+        let config = HashMap::new();
+        let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn time_from_timestamp() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"time.star\", \"time\")\n",
+            "load(\"render.star\", \"render\")\n",
+            "\n",
+            "def main(config):\n",
+            "    t = time.from_timestamp(0)\n",
+            "    if t != \"1970-01-01T00:00:00Z\":\n",
+            "        fail(\"expected epoch, got \" + t)\n",
+            "    return render.Root(\n",
+            "        child = render.Text(t),\n",
+            "    )\n",
+        );
+        let config = HashMap::new();
+        let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn time_parse_duration() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"time.star\", \"time\")\n",
+            "load(\"render.star\", \"render\")\n",
+            "\n",
+            "def main(config):\n",
+            "    ms = time.parse_duration(\"5s\")\n",
+            "    if ms != 5000:\n",
+            "        fail(\"expected 5000, got \" + str(ms))\n",
+            "    return render.Root(\n",
+            "        child = render.Text(str(ms)),\n",
+            "    )\n",
+        );
+        let config = HashMap::new();
+        let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
+        assert_eq!(roots.len(), 1);
     }
 }
