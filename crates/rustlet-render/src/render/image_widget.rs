@@ -10,6 +10,17 @@ pub struct ImageWidget {
 
 impl ImageWidget {
     pub fn from_bytes(data: &[u8], width: Option<i32>, height: Option<i32>) -> Result<Self> {
+        if let Ok(svg_data) = std::str::from_utf8(data) {
+            if looks_like_svg(svg_data) {
+                let pixmap = render_svg(svg_data, width, height)?;
+                return Ok(Self {
+                    frames: vec![pixmap],
+                    hold_frames: 1,
+                    delay_ms: 0,
+                });
+            }
+        }
+
         let cursor = std::io::Cursor::new(data);
         let reader = image::ImageReader::new(cursor)
             .with_guessed_format()
@@ -47,6 +58,41 @@ impl ImageWidget {
         let i = mod_int(frame_idx / self.hold_frames, self.frames.len() as i32);
         &self.frames[i as usize]
     }
+}
+
+fn looks_like_svg(data: &str) -> bool {
+    let trimmed = data.trim_start();
+    trimmed.starts_with("<svg") || (trimmed.starts_with("<?xml") && trimmed.contains("<svg"))
+}
+
+fn render_svg(svg_data: &str, width: Option<i32>, height: Option<i32>) -> Result<Pixmap> {
+    let opt = resvg::usvg::Options::default();
+    let tree = resvg::usvg::Tree::from_str(svg_data, &opt).context("failed to parse SVG")?;
+    let size = tree.size();
+
+    let intrinsic_w = size.width().round().max(1.0) as i32;
+    let intrinsic_h = size.height().round().max(1.0) as i32;
+
+    let (target_w, target_h) = match (width, height) {
+        (Some(w), Some(h)) if w > 0 && h > 0 => (w as u32, h as u32),
+        (Some(w), _) if w > 0 => {
+            let h = ((w as f32) * size.height() / size.width()).round().max(1.0) as u32;
+            (w as u32, h)
+        }
+        (_, Some(h)) if h > 0 => {
+            let w = ((h as f32) * size.width() / size.height()).round().max(1.0) as u32;
+            (w, h as u32)
+        }
+        _ => (intrinsic_w as u32, intrinsic_h as u32),
+    };
+
+    let mut pixmap = Pixmap::new(target_w, target_h).context("failed to create SVG pixmap")?;
+    let transform = tiny_skia::Transform::from_scale(
+        target_w as f32 / size.width(),
+        target_h as f32 / size.height(),
+    );
+    resvg::render(&tree, transform, &mut pixmap.as_mut());
+    Ok(pixmap)
 }
 
 fn decode_gif_frames(data: &[u8]) -> Result<(Vec<image::DynamicImage>, i32)> {
@@ -270,5 +316,12 @@ mod tests {
         // (0,0) should still be empty
         let corner = pixmap.pixels()[0];
         assert_eq!(corner.alpha(), 0);
+    }
+
+    #[test]
+    fn decode_svg() {
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="2" height="1" viewBox="0 0 2 1"><rect width="2" height="1" fill="#00ff00"/></svg>"##;
+        let widget = ImageWidget::from_bytes(svg, None, None).unwrap();
+        assert_eq!(widget.size(), Some((2, 1)));
     }
 }

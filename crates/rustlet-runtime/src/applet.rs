@@ -18,7 +18,7 @@ use crate::http_module::build_http_globals;
 use crate::humanize_module::build_humanize_globals;
 use crate::json_module::build_json_globals;
 use crate::math_module::build_math_globals;
-use crate::random_module::build_random_globals;
+use crate::random_module::{build_random_globals, seed_for_execution};
 use crate::render_module::build_render_globals;
 use crate::schema_module::build_schema_globals;
 use crate::starlark_canvas::StarlarkCanvas;
@@ -64,6 +64,8 @@ impl Applet {
         is_2x: bool,
         base_dir: Option<&Path>,
     ) -> Result<Vec<Root>> {
+        seed_for_execution(id);
+
         let render_frozen = build_render_frozen_module(width, height, is_2x)?;
         let time_frozen = build_simple_frozen_module("time", build_time_globals())?;
         let base64_frozen = build_simple_frozen_module("base64", build_base64_globals())?;
@@ -423,6 +425,31 @@ mod tests {
     }
 
     #[test]
+    fn base64_binary_decode_and_image_loading() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"encoding/base64.star\", \"base64\")\n",
+            "load(\"render.star\", \"render\")\n",
+            "\n",
+            "PNG = \"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABAQMAAAAl21bKAAAAA1BMVEX/AAAZ4gk3AAAACklEQVR4nGNiAAAABgADNjd8qAAAAABJRU5ErkJggg==\"\n",
+            "\n",
+            "def main(config):\n",
+            "    data = base64.decode(PNG)\n",
+            "    if type(data) != \"bytes\":\n",
+            "        fail(\"png decode must return bytes\")\n",
+            "    if base64.encode(data) != PNG:\n",
+            "        fail(\"bytes re-encode broken\")\n",
+            "    img = render.Image(src = data)\n",
+            "    if img.size() != (1, 1):\n",
+            "        fail(\"image decode from bytes broken\")\n",
+            "    return render.Root(child = img)\n",
+        );
+        let config = HashMap::new();
+        let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
     fn math_pow() {
         let applet = Applet::new();
         let src = concat!(
@@ -443,18 +470,36 @@ mod tests {
     }
 
     #[test]
-    fn random_number() {
+    fn random_seed_and_float_match_pixlet_shape() {
         let applet = Applet::new();
         let src = concat!(
             "load(\"random.star\", \"random\")\n",
             "load(\"render.star\", \"render\")\n",
             "\n",
             "def main(config):\n",
-            "    n = random.number(1, 100)\n",
-            "    if n < 1 or n > 100:\n",
-            "        fail(\"out of range: \" + str(n))\n",
+            "    random.seed(4711)\n",
+            "    sequence = [random.number(0, 1 << 20) for _ in range(32)]\n",
+            "    f = random.float()\n",
+            "    if f < 0 or f >= 1:\n",
+            "        fail(\"float out of range\")\n",
+            "    random.seed(4711)\n",
+            "    for i in range(len(sequence)):\n",
+            "        if sequence[i] != random.number(0, 1 << 20):\n",
+            "            fail(\"identical seed mismatch\")\n",
+            "    random.seed(4712)\n",
+            "    same = 0\n",
+            "    for i in range(len(sequence)):\n",
+            "        if sequence[i] == random.number(0, 1 << 20):\n",
+            "            same += 1\n",
+            "    if same == len(sequence):\n",
+            "        fail(\"different seeds produced same sequence\")\n",
+            "    if random.number(9223372036854775807, 9223372036854775807) != 9223372036854775807:\n",
+            "        fail(\"max edge case broken\")\n",
+            "    secure = random.number(0, 10, secure = True)\n",
+            "    if secure < 0 or secure > 10:\n",
+            "        fail(\"secure random out of range\")\n",
             "    return render.Root(\n",
-            "        child = render.Text(str(n)),\n",
+            "        child = render.Text(\"ok\"),\n",
             "    )\n",
         );
         let config = HashMap::new();
@@ -630,6 +675,37 @@ mod tests {
     }
 
     #[test]
+    fn color_mutation_and_hsv_attrs_match_pixlet_shape() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"render.star\", \"render\")\n",
+            "load(\"color.star\", \"color\")\n",
+            "\n",
+            "def main(config):\n",
+            "    c = color.rgb(300, -10, 10, 999)\n",
+            "    if c.rgba() != (255, 0, 10, 255):\n",
+            "        fail(\"rgb clamp broken: \" + str(c.rgba()))\n",
+            "    c.h = 120\n",
+            "    c.s = 1\n",
+            "    c.v = 1\n",
+            "    if c.rgb() != (0, 255, 0):\n",
+            "        fail(\"hsv field mutation broken: \" + str(c.rgb()))\n",
+            "    h, s, v = c.hsv()\n",
+            "    if h != c.h or s != c.s or v != c.v:\n",
+            "        fail(\"hsv getters broken\")\n",
+            "    if c.hsva() != (120.0, 1.0, 1.0, 255):\n",
+            "        fail(\"hsva broken: \" + str(c.hsva()))\n",
+            "    c.a = 64\n",
+            "    if c.hex() != \"#00ff0040\":\n",
+            "        fail(\"alpha mutation broken: \" + c.hex())\n",
+            "    return render.Root(child = render.Text(c.hex()))\n",
+        );
+        let config = HashMap::new();
+        let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
     fn color_string_still_works() {
         let applet = Applet::new();
         let src = concat!(
@@ -655,8 +731,8 @@ mod tests {
             "def main(config):\n",
             "    c = color.rgb(255, 0, 0)\n",
             "    s = str(c)\n",
-            "    if s != \"#ff0000\":\n",
-            "        fail(\"expected #ff0000, got \" + s)\n",
+            "    if s != \"Color(\\\"#ff0000\\\")\":\n",
+            "        fail(\"expected Color(\\\"#ff0000\\\"), got \" + s)\n",
             "    return render.Root(\n",
             "        child = render.Text(s),\n",
             "    )\n",
@@ -769,6 +845,25 @@ mod tests {
         let roots = applet
             .run_with_options("main.star", &src, &config, 64, 32, false, Some(dir.path()))
             .unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn image_accepts_svg_text() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"render.star\", \"render\")\n",
+            "\n",
+            "SVG = \"<svg xmlns='http://www.w3.org/2000/svg' width='2' height='1' viewBox='0 0 2 1'><rect width='2' height='1' fill='#00ff00'/></svg>\"\n",
+            "\n",
+            "def main(config):\n",
+            "    img = render.Image(src = SVG)\n",
+            "    if img.size() != (2, 1):\n",
+            "        fail(\"svg image size broken: \" + str(img.size()))\n",
+            "    return render.Root(child = img)\n",
+        );
+        let config = HashMap::new();
+        let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
         assert_eq!(roots.len(), 1);
     }
 }

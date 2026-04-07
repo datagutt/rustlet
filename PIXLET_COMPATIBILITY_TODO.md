@@ -23,17 +23,17 @@ Scope for this audit:
 
 ### Critical binary/data incompatibilities
 
-- [ ] `encoding/base64.star` is incompatible with Pixlet byte handling:
+- [x] `encoding/base64.star` is incompatible with Pixlet byte handling:
   `decode()` currently forces UTF-8 and cannot return binary data.
-- [ ] `render.Image(src=...)` is incompatible:
+- [x] `render.Image(src=...)` is incompatible:
   the runtime currently base64-decodes `src` again instead of consuming Pixlet-style raw bytes / raw SVG text.
 - [x] Asset `readall("rb")` behavior is missing, which blocks binary image workflows used by reference Pixlet apps.
-- [ ] SVG input compatibility is incomplete because `render.Image` assumes a base64 payload instead of trying SVG/text/image decoders in Pixlet order.
+- [x] SVG input compatibility is incomplete because `render.Image` assumes a base64 payload instead of trying SVG/text/image decoders in Pixlet order.
 
 ### Runtime semantics gaps
 
-- [ ] `random.star` is incomplete: missing `seed()`, `float()`, `secure=True` handling, and Pixlet's deterministic thread-scoped seeding behavior.
-- [ ] `color.star` is incomplete: missing writable `h`, `s`, `v` fields and missing `hsv()` / `hsva()` methods on `Color`.
+- [x] `random.star` is incomplete: missing `seed()`, `float()`, `secure=True` handling, and Pixlet's deterministic thread-scoped seeding behavior.
+- [x] `color.star` is incomplete: missing writable `h`, `s`, `v` fields and missing `hsv()` / `hsva()` methods on `Color`.
 - [ ] `time.star` is only partially compatible; Pixlet supports richer parsing/format/location behavior than the current implementation.
 - [ ] `http.star` behavior diverges from Pixlet: request argument surface and caching/header semantics do not match the reference implementation.
 - [ ] `schema.star` is currently a lightweight struct factory, not a compatibility-complete implementation.
@@ -86,15 +86,27 @@ Suggested commit:
 
 Goal: make the runtime behave like Pixlet for data flow and module contracts.
 
-- [ ] Rework base64 support to preserve binary data.
-- [ ] Make `render.Image` accept Pixlet-style raw bytes / SVG text and expose `delay` / `hold_frames`.
-- [ ] Fix `random.star` behavior and API.
-- [ ] Close high-impact gaps in `color.star`, `time.star`, and `http.star`.
-- [ ] Add compatibility tests for binary image loading, HTTP response shape, random determinism, and color/time behavior.
+- [x] Rework base64 support to preserve binary data.
+- [x] Make `render.Image` accept Pixlet-style raw bytes / SVG text and expose `delay` / `hold_frames`.
+- [x] Fix `random.star` behavior and API.
+- [x] Close high-impact gaps in `color.star`.
+- [x] Add compatibility tests for binary image loading, random determinism, color mutation, and SVG image loading.
 
 Suggested commit:
 
 - `runtime: fix pixlet binary and module semantics`
+
+### Phase 2b: Time and HTTP semantics parity
+
+Goal: close the remaining runtime-behavior gaps that are larger than the binary/module slice above.
+
+- [ ] Align `time.star` with Pixlet duration and location semantics.
+- [ ] Align `http.star` request arguments, response shape, and caching/header semantics with Pixlet.
+- [ ] Add compatibility tests for HTTP response shape and time arithmetic/location behavior.
+
+Suggested commit:
+
+- `runtime: align pixlet time and http semantics`
 
 ### Phase 3: Render correctness parity
 
