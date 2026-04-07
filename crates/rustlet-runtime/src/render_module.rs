@@ -5,11 +5,12 @@ use starlark::values::none::NoneType;
 use starlark::values::Value;
 
 use rustlet_render::{
-    parse_color, Animation, BoxWidget, Circle, Column, ImageWidget, Insets, Marquee, MarqueeAlign,
+    Animation, BoxWidget, Circle, Column, ImageWidget, Insets, Marquee, MarqueeAlign,
     Padding, Row, ScrollDirection, Sequence, Stack, Text, Widget, WrappedText, WrapAlign,
     CrossAlign, MainAlign,
 };
 
+use crate::starlark_color::StarlarkColor;
 use crate::starlark_widgets::{RootMeta, StarlarkWidget};
 
 /// Extract child widgets from a Starlark list Value.
@@ -45,13 +46,9 @@ fn extract_child(child_val: Value) -> anyhow::Result<Box<dyn Widget>> {
     sw.take_widget()
 }
 
-/// Parse color string, returning None for empty string.
-fn parse_optional_color(s: &str) -> anyhow::Result<Option<tiny_skia::Color>> {
-    if s.is_empty() {
-        Ok(None)
-    } else {
-        Ok(Some(parse_color(s)?))
-    }
+/// Extract an optional color from a Starlark Value (string, Color object, or None).
+fn extract_color(v: Value) -> anyhow::Result<Option<tiny_skia::Color>> {
+    StarlarkColor::color_from_value(v)
 }
 
 #[starlark::starlark_module]
@@ -78,7 +75,7 @@ pub fn render_module(builder: &mut GlobalsBuilder) {
         #[starlark(default = 0)] width: i32,
         #[starlark(default = 0)] height: i32,
         #[starlark(default = 0)] padding: i32,
-        #[starlark(default = "")] color: &str,
+        #[starlark(default = NoneType)] color: Value<'v>,
         eval: &mut Evaluator<'v, '_, '_>,
     ) -> anyhow::Result<Value<'v>> {
         let widget = BoxWidget {
@@ -86,7 +83,7 @@ pub fn render_module(builder: &mut GlobalsBuilder) {
             width,
             height,
             padding,
-            color: parse_optional_color(color)?,
+            color: extract_color(color)?,
         };
         Ok(eval.heap().alloc(StarlarkWidget::new(Box::new(widget), "Box")))
     }
@@ -96,7 +93,7 @@ pub fn render_module(builder: &mut GlobalsBuilder) {
         #[starlark(default = "")] font: &str,
         #[starlark(default = 0)] height: i32,
         #[starlark(default = 0)] offset: i32,
-        #[starlark(default = "")] color: &str,
+        #[starlark(default = NoneType)] color: Value<'v>,
         eval: &mut Evaluator<'v, '_, '_>,
     ) -> anyhow::Result<Value<'v>> {
         let mut t = Text::new(content);
@@ -109,8 +106,8 @@ pub fn render_module(builder: &mut GlobalsBuilder) {
         if offset != 0 {
             t = t.with_offset(offset);
         }
-        if !color.is_empty() {
-            t = t.with_color(parse_color(color)?);
+        if let Some(c) = extract_color(color)? {
+            t = t.with_color(c);
         }
         Ok(eval.heap().alloc(StarlarkWidget::new(Box::new(t), "Text")))
     }
@@ -162,14 +159,14 @@ pub fn render_module(builder: &mut GlobalsBuilder) {
         child: Value<'v>,
         #[starlark(default = 0)] pad: i32,
         #[starlark(default = false)] expanded: bool,
-        #[starlark(default = "")] color: &str,
+        #[starlark(default = NoneType)] color: Value<'v>,
         eval: &mut Evaluator<'v, '_, '_>,
     ) -> anyhow::Result<Value<'v>> {
         let widget = Padding {
             child: extract_child(child)?,
             pad: Insets::uniform(pad),
             expanded,
-            color: parse_optional_color(color)?,
+            color: extract_color(color)?,
         };
         Ok(eval.heap().alloc(StarlarkWidget::new(Box::new(widget), "Padding")))
     }
@@ -231,13 +228,13 @@ pub fn render_module(builder: &mut GlobalsBuilder) {
 
     fn Circle<'v>(
         #[starlark(default = NoneType)] child: Value<'v>,
-        #[starlark(default = "")] color: &str,
+        #[starlark(default = NoneType)] color: Value<'v>,
         #[starlark(default = 0)] diameter: i32,
         eval: &mut Evaluator<'v, '_, '_>,
     ) -> anyhow::Result<Value<'v>> {
         let mut widget = Circle::new(diameter);
         widget.child = extract_optional_child(child)?;
-        widget.color = parse_optional_color(color)?;
+        widget.color = extract_color(color)?;
         Ok(eval.heap().alloc(StarlarkWidget::new(Box::new(widget), "Circle")))
     }
 
@@ -247,7 +244,7 @@ pub fn render_module(builder: &mut GlobalsBuilder) {
         #[starlark(default = 0)] width: i32,
         #[starlark(default = 0)] height: i32,
         #[starlark(default = 0)] line_spacing: i32,
-        #[starlark(default = "")] color: &str,
+        #[starlark(default = NoneType)] color: Value<'v>,
         #[starlark(default = "")] align: &str,
         eval: &mut Evaluator<'v, '_, '_>,
     ) -> anyhow::Result<Value<'v>> {
@@ -264,8 +261,8 @@ pub fn render_module(builder: &mut GlobalsBuilder) {
         if line_spacing > 0 {
             wt = wt.with_line_spacing(line_spacing);
         }
-        if !color.is_empty() {
-            wt = wt.with_color(parse_color(color)?);
+        if let Some(c) = extract_color(color)? {
+            wt = wt.with_color(c);
         }
         if !align.is_empty() {
             wt = wt.with_align(WrapAlign::from_str(align));

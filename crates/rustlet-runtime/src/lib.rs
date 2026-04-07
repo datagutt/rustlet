@@ -1,5 +1,7 @@
 mod starlark_widgets;
+mod starlark_color;
 mod render_module;
+mod color_module;
 mod time_module;
 mod base64_module;
 mod json_module;

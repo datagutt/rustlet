@@ -10,6 +10,7 @@ use starlark::values::structs::AllocStruct;
 use rustlet_render::Root;
 
 use crate::base64_module::build_base64_globals;
+use crate::color_module::build_color_globals;
 use crate::json_module::build_json_globals;
 use crate::math_module::build_math_globals;
 use crate::random_module::build_random_globals;
@@ -47,6 +48,7 @@ impl Applet {
         let json_frozen = build_simple_frozen_module("json", build_json_globals())?;
         let math_frozen = build_math_frozen_module()?;
         let random_frozen = build_simple_frozen_module("random", build_random_globals())?;
+        let color_frozen = build_simple_frozen_module("color", build_color_globals())?;
 
         let ast = AstModule::parse(id, src.to_owned(), &Dialect::Standard)
             .map_err(|e| anyhow!("{e}"))?;
@@ -60,6 +62,7 @@ impl Applet {
         modules_map.insert("encoding/json.star", &json_frozen);
         modules_map.insert("math.star", &math_frozen);
         modules_map.insert("random.star", &random_frozen);
+        modules_map.insert("color.star", &color_frozen);
         let loader = ReturnFileLoader {
             modules: &modules_map,
         };
@@ -424,6 +427,148 @@ mod tests {
             "        fail(\"expected 5000, got \" + str(ms))\n",
             "    return render.Root(\n",
             "        child = render.Text(str(ms)),\n",
+            "    )\n",
+        );
+        let config = HashMap::new();
+        let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn color_rgb_in_box() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"render.star\", \"render\")\n",
+            "load(\"color.star\", \"color\")\n",
+            "\n",
+            "def main(config):\n",
+            "    return render.Root(\n",
+            "        child = render.Box(color = color.rgb(255, 0, 0)),\n",
+            "    )\n",
+        );
+        let config = HashMap::new();
+        let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn color_hex_constructor() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"render.star\", \"render\")\n",
+            "load(\"color.star\", \"color\")\n",
+            "\n",
+            "def main(config):\n",
+            "    return render.Root(\n",
+            "        child = render.Box(color = color.hex(\"#ff0000\")),\n",
+            "    )\n",
+        );
+        let config = HashMap::new();
+        let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn color_attributes() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"render.star\", \"render\")\n",
+            "load(\"color.star\", \"color\")\n",
+            "\n",
+            "def main(config):\n",
+            "    c = color.rgb(255, 128, 0)\n",
+            "    if c.r != 255:\n",
+            "        fail(\"expected r=255, got \" + str(c.r))\n",
+            "    if c.g != 128:\n",
+            "        fail(\"expected g=128, got \" + str(c.g))\n",
+            "    if c.b != 0:\n",
+            "        fail(\"expected b=0, got \" + str(c.b))\n",
+            "    if c.a != 255:\n",
+            "        fail(\"expected a=255, got \" + str(c.a))\n",
+            "    return render.Root(\n",
+            "        child = render.Text(str(c.r)),\n",
+            "    )\n",
+        );
+        let config = HashMap::new();
+        let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn color_hex_method() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"render.star\", \"render\")\n",
+            "load(\"color.star\", \"color\")\n",
+            "\n",
+            "def main(config):\n",
+            "    c = color.rgb(255, 0, 0)\n",
+            "    h = c.hex()\n",
+            "    if h != \"#ff0000\":\n",
+            "        fail(\"expected #ff0000, got \" + h)\n",
+            "    return render.Root(\n",
+            "        child = render.Text(h),\n",
+            "    )\n",
+        );
+        let config = HashMap::new();
+        let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn color_hsv() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"render.star\", \"render\")\n",
+            "load(\"color.star\", \"color\")\n",
+            "\n",
+            "def main(config):\n",
+            "    c = color.hsv(0, 1.0, 1.0)\n",
+            "    if c.r != 255:\n",
+            "        fail(\"expected r=255, got \" + str(c.r))\n",
+            "    if c.g != 0:\n",
+            "        fail(\"expected g=0, got \" + str(c.g))\n",
+            "    if c.b != 0:\n",
+            "        fail(\"expected b=0, got \" + str(c.b))\n",
+            "    return render.Root(\n",
+            "        child = render.Text(str(c.r)),\n",
+            "    )\n",
+        );
+        let config = HashMap::new();
+        let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn color_string_still_works() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"render.star\", \"render\")\n",
+            "\n",
+            "def main(config):\n",
+            "    return render.Root(\n",
+            "        child = render.Box(color = \"#00ff00\"),\n",
+            "    )\n",
+        );
+        let config = HashMap::new();
+        let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn color_display_format() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"render.star\", \"render\")\n",
+            "load(\"color.star\", \"color\")\n",
+            "\n",
+            "def main(config):\n",
+            "    c = color.rgb(255, 0, 0)\n",
+            "    s = str(c)\n",
+            "    if s != \"#ff0000\":\n",
+            "        fail(\"expected #ff0000, got \" + s)\n",
+            "    return render.Root(\n",
+            "        child = render.Text(s),\n",
             "    )\n",
         );
         let config = HashMap::new();
