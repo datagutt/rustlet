@@ -82,20 +82,18 @@ impl Text {
         let mut cursor_x: i32 = 0;
         for ch in self.content.chars() {
             if let Some(glyph) = font.glyph(ch) {
-                for row in 0..glyph.height as i32 {
-                    let byte = glyph.bitmap[row as usize];
-                    for col in 0..glyph.width as i32 {
-                        // MSB-left: bit 7 is leftmost column
-                        if byte & (0x80 >> col) != 0 {
-                            let px = cursor_x + col;
-                            let py = row;
+                for row in 0..glyph.height as u8 {
+                    for col in 0..glyph.width as u8 {
+                        if glyph.pixel(col, row) {
+                            let px = cursor_x + glyph.x_offset as i32 + col as i32;
+                            let py = row as i32;
                             if px >= 0 && (px as usize) < dst_w && py >= 0 && (py as usize) < dst_h {
                                 pixels[py as usize * dst_w + px as usize] = premul;
                             }
                         }
                     }
                 }
-                cursor_x += glyph.width as i32;
+                cursor_x += glyph.advance as i32;
             } else {
                 cursor_x += font.char_width as i32;
             }
@@ -172,7 +170,8 @@ mod tests {
     #[test]
     fn text_hello_dimensions() {
         let t = Text::new("Hello");
-        assert_eq!(t.rendered_width, 25); // 5 chars * 5px
+        // tb-8 BDF: H=5 + e=5 + l=4 + l=4 + o=5 = 23
+        assert_eq!(t.rendered_width, 23);
         assert_eq!(t.rendered_height, 8);
     }
 
@@ -205,14 +204,16 @@ mod tests {
     #[test]
     fn text_size() {
         let t = Text::new("Hi");
-        assert_eq!(t.size(), Some((10, 8)));
+        // tb-8 BDF: H=5 + i=4 = 9
+        assert_eq!(t.size(), Some((9, 8)));
     }
 
     #[test]
     fn text_paint_bounds() {
         let t = Text::new("Test");
         let pb = t.paint_bounds(Rect::new(0, 0, 64, 32), 0);
-        assert_eq!(pb.width, 20);
+        // tb-8 BDF: T=4 + e=5 + s=4 + t=5 = 18
+        assert_eq!(pb.width, 18);
         assert_eq!(pb.height, 8);
     }
 }

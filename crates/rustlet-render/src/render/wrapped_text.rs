@@ -222,12 +222,11 @@ impl Widget for WrappedText {
 
             for ch in line.chars() {
                 if let Some(glyph) = font.glyph(ch) {
-                    for row in 0..glyph.height as i32 {
-                        let byte = glyph.bitmap[row as usize];
-                        for col in 0..glyph.width as i32 {
-                            if byte & (0x80 >> col) != 0 {
-                                let px = cursor_x + col;
-                                let py = cursor_y + row;
+                    for row in 0..glyph.height as u8 {
+                        for col in 0..glyph.width as u8 {
+                            if glyph.pixel(col, row) {
+                                let px = cursor_x + glyph.x_offset as i32 + col as i32;
+                                let py = cursor_y + row as i32;
                                 if px >= 0 && (px as usize) < dst_w
                                     && py >= 0 && (py as usize) < dst_h
                                 {
@@ -236,7 +235,7 @@ impl Widget for WrappedText {
                             }
                         }
                     }
-                    cursor_x += glyph.width as i32;
+                    cursor_x += glyph.advance as i32;
                 } else {
                     cursor_x += font.char_width as i32;
                 }
