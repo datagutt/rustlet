@@ -1,6 +1,8 @@
 use super::{Rect, Widget};
 
+#[allow(dead_code)]
 pub const DEFAULT_FRAME_WIDTH: u32 = 64;
+#[allow(dead_code)]
 pub const DEFAULT_FRAME_HEIGHT: u32 = 32;
 pub const DEFAULT_MAX_FRAME_COUNT: i32 = 2000;
 pub const DEFAULT_DELAY_MS: i32 = 50;

@@ -1,3 +1,106 @@
-fn main() {
-    println!("rustlet CLI — not yet implemented");
+use std::collections::HashMap;
+use std::path::PathBuf;
+
+use anyhow::{bail, Result};
+use clap::{Parser, Subcommand, ValueEnum};
+
+use rustlet_encode::OutputFormat;
+use rustlet_runtime::Applet;
+
+#[derive(Parser)]
+#[command(name = "rustlet", about = "build apps for pixel-based displays")]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Render a .star file to an image
+    Render {
+        /// Path to the .star file
+        file: PathBuf,
+
+        /// Output file path (default: stdout)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Display width in pixels
+        #[arg(long, default_value_t = 64)]
+        width: u32,
+
+        /// Display height in pixels
+        #[arg(long, default_value_t = 32)]
+        height: u32,
+
+        /// Output format (auto-detected from extension if not specified)
+        #[arg(long, value_enum)]
+        format: Option<Format>,
+    },
+}
+
+#[derive(Clone, ValueEnum)]
+enum Format {
+    Gif,
+    Webp,
+}
+
+fn main() -> Result<()> {
+    let cli = Cli::parse();
+
+    match cli.command {
+        Commands::Render {
+            file,
+            output,
+            width,
+            height,
+            format,
+        } => {
+            let src = std::fs::read_to_string(&file)?;
+            let id = file
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("app");
+
+            let applet = Applet::new();
+            let config = HashMap::new();
+            let roots = applet.run(id, &src, &config)?;
+
+            if roots.is_empty() {
+                bail!("main() returned no roots");
+            }
+
+            let root = roots.into_iter().next().unwrap();
+            let frames = root.paint_frames(width, height);
+            let delay_ms = root.delay as u16;
+
+            let out_format = match format {
+                Some(Format::Gif) => OutputFormat::Gif,
+                Some(Format::Webp) => OutputFormat::WebP,
+                None => {
+                    // Auto-detect from output extension
+                    match output
+                        .as_ref()
+                        .and_then(|p| p.extension())
+                        .and_then(|e| e.to_str())
+                    {
+                        Some("webp") => OutputFormat::WebP,
+                        _ => OutputFormat::Gif,
+                    }
+                }
+            };
+
+            let data = rustlet_encode::encode(&frames, delay_ms, out_format)?;
+
+            match output {
+                Some(path) => std::fs::write(&path, &data)?,
+                None => {
+                    use std::io::Write;
+                    std::io::stdout().write_all(&data)?;
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
