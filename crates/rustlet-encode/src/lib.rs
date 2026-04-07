@@ -1,4 +1,8 @@
+pub mod filter;
+
 use anyhow::{bail, Result};
+
+pub use filter::{apply_filter, magnify, Filter};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutputFormat {

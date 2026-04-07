@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use anyhow::{bail, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 
-use rustlet_encode::OutputFormat;
+use rustlet_encode::{Filter, OutputFormat};
 use rustlet_runtime::Applet;
 
 #[derive(Parser)]
@@ -36,6 +36,14 @@ enum Commands {
         /// Output format (auto-detected from extension if not specified)
         #[arg(long, value_enum)]
         format: Option<Format>,
+
+        /// Color filter to apply before encoding
+        #[arg(long, value_enum, default_value_t = Filter::None)]
+        filter: Filter,
+
+        /// Integer magnification factor
+        #[arg(long, default_value_t = 1)]
+        magnify: u32,
     },
 }
 
@@ -55,6 +63,8 @@ fn main() -> Result<()> {
             width,
             height,
             format,
+            filter,
+            magnify,
         } => {
             let src = std::fs::read_to_string(&file)?;
             let id = file
@@ -64,15 +74,18 @@ fn main() -> Result<()> {
 
             let applet = Applet::new();
             let config = HashMap::new();
-            let roots = applet.run(id, &src, &config)?;
+            let roots = applet.run(id, &src, &config, width, height)?;
 
             if roots.is_empty() {
                 bail!("main() returned no roots");
             }
 
             let root = roots.into_iter().next().unwrap();
-            let frames = root.paint_frames(width, height);
+            let mut frames = root.paint_frames(width, height);
             let delay_ms = root.delay as u16;
+
+            rustlet_encode::apply_filter(&mut frames, filter);
+            let frames = rustlet_encode::magnify(&frames, magnify);
 
             let out_format = match format {
                 Some(Format::Gif) => OutputFormat::Gif,
