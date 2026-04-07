@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 rustlet-render = { path = "../rustlet-render" }
 starlark = "0.13"
+starlark_derive = "0.13"
 allocative = "0.3"
 derive_more = "1"
 anyhow = "1"
