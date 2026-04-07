@@ -6,7 +6,7 @@ use starlark::values::tuple::TupleRef;
 use starlark::values::Value;
 
 use rustlet_render::{
-    Animation, BoxWidget, Circle, Column, ImageWidget, Insets, Marquee, MarqueeAlign,
+    Animation, BoxWidget, Circle, Column, Emoji, ImageWidget, Insets, Marquee, MarqueeAlign,
     Padding, Row, ScrollDirection, Sequence, Stack, Text, Widget, WrappedText, WrapAlign,
     CrossAlign, MainAlign,
 };
@@ -292,6 +292,16 @@ pub fn render_module(builder: &mut GlobalsBuilder) {
             wt = wt.with_align(WrapAlign::from_str(align));
         }
         Ok(eval.heap().alloc(StarlarkWidget::new(Box::new(wt), "WrappedText")))
+    }
+
+    fn Emoji<'v>(
+        emoji: &str,
+        #[starlark(default = 20)] width: i32,
+        #[starlark(default = 20)] height: i32,
+        eval: &mut Evaluator<'v, '_, '_>,
+    ) -> anyhow::Result<Value<'v>> {
+        let widget = Emoji::new(emoji, width, height);
+        Ok(eval.heap().alloc(StarlarkWidget::new(Box::new(widget), "Emoji")))
     }
 }
 

@@ -48,6 +48,10 @@ enum Commands {
         /// Double the canvas size (128x64) and use terminus-16 default font
         #[arg(long = "2x")]
         double: bool,
+
+        /// Directory containing Twemoji SVG files (named by codepoint, e.g. 1f600.svg)
+        #[arg(long)]
+        twemoji_dir: Option<PathBuf>,
     },
 }
 
@@ -70,7 +74,12 @@ fn main() -> Result<()> {
             filter,
             magnify,
             double,
+            twemoji_dir,
         } => {
+            if let Some(ref dir) = twemoji_dir {
+                rustlet_render::Emoji::set_twemoji_dir(&dir.to_string_lossy());
+            }
+
             let (width, height, is_2x) = if double {
                 (128, 64, true)
             } else {

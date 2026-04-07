@@ -1,5 +1,11 @@
+use std::path::Path;
+use std::sync::OnceLock;
+use std::sync::Mutex;
+
 use super::{Rect, Widget};
 use tiny_skia::Pixmap;
+
+static TWEMOJI_DIR: OnceLock<Mutex<Option<String>>> = OnceLock::new();
 
 pub struct Emoji {
     pixmap: Option<Pixmap>,
@@ -8,10 +14,36 @@ pub struct Emoji {
 }
 
 impl Emoji {
+    /// Set the directory where Twemoji SVG files are stored.
+    /// Files should be named by codepoint (e.g. "1f600.svg").
+    pub fn set_twemoji_dir(dir: &str) {
+        let lock = TWEMOJI_DIR.get_or_init(|| Mutex::new(None));
+        *lock.lock().unwrap() = Some(dir.to_string());
+    }
+
+    /// Get the configured Twemoji directory, if any.
+    pub fn twemoji_dir() -> Option<String> {
+        TWEMOJI_DIR
+            .get()
+            .and_then(|m| m.lock().ok())
+            .and_then(|guard| guard.clone())
+    }
+
     /// Create an emoji widget from a Unicode emoji string.
-    /// Currently renders a colored placeholder square derived from the codepoint.
-    /// Use `from_svg` for actual SVG rendering.
+    /// Looks up the Twemoji SVG from the configured directory.
+    /// Falls back to a colored placeholder if no directory is set or file not found.
     pub fn new(emoji_str: &str, width: i32, height: i32) -> Self {
+        let codepoint = Self::emoji_to_codepoint(emoji_str);
+
+        // Try loading from twemoji directory
+        if let Some(dir) = Self::twemoji_dir() {
+            let svg_path = Path::new(&dir).join(format!("{codepoint}.svg"));
+            if let Ok(svg_data) = std::fs::read_to_string(&svg_path) {
+                return Self::from_svg(&svg_data, width, height);
+            }
+        }
+
+        // Fallback: colored placeholder
         let hash = emoji_str
             .chars()
             .fold(0u32, |acc, c| acc.wrapping_mul(31).wrapping_add(c as u32));
