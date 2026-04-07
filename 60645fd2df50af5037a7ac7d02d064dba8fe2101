@@ -1,0 +1,31 @@
+crates/rustlet-runtime/Cargo.toml
+  f84287449064e176 9
+crates/rustlet-runtime/src/starlark_widgets.rs
+  f84287449064e176 1-89
+crates/rustlet-runtime/src/render_module.rs
+  f84287449064e176 1-282
+crates/rustlet-runtime/src/lib.rs
+  f84287449064e176 1-5
+crates/rustlet-runtime/src/applet.rs
+  f84287449064e176 1-213
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "60645fd2df50af5037a7ac7d02d064dba8fe2101",
+  "prompts": {
+    "f84287449064e176": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7016a025-6337-44ca-aa46-e2c499c476fc",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "datagutt",
+      "messages": [],
+      "total_additions": 735,
+      "total_deletions": 146,
+      "accepted_lines": 590,
+      "overriden_lines": 0
+    }
+  }
+}
