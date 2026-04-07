@@ -1,0 +1,31 @@
+crates/rustlet-runtime/src/color_module.rs
+  f84287449064e176 1-122
+crates/rustlet-runtime/src/lib.rs
+  f84287449064e176 2,4
+crates/rustlet-runtime/src/starlark_color.rs
+  f84287449064e176 1-120
+crates/rustlet-runtime/src/applet.rs
+  f84287449064e176 13,51,65,436-577
+crates/rustlet-runtime/src/render_module.rs
+  f84287449064e176 8,13,49-51,78,86,96,109-110,162,169,231,237,247,264-265
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "dbb072205ad65b0d0dd4b1a8fbceb3676eab6a46",
+  "prompts": {
+    "f84287449064e176": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7016a025-6337-44ca-aa46-e2c499c476fc",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "datagutt",
+      "messages": [],
+      "total_additions": 241,
+      "total_deletions": 76,
+      "accepted_lines": 406,
+      "overriden_lines": 0
+    }
+  }
+}
