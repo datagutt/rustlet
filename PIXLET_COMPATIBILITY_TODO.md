@@ -12,13 +12,13 @@ Scope for this audit:
 
 ### Critical runtime API gaps
 
-- [ ] Missing widget constructors in `render.star`: `Arc`, `Line`, `PieChart`, `Plot`, `Polygon`.
-- [ ] Missing `render.fonts` map.
-- [ ] Missing Pixlet-style widget attributes and methods on Starlark widget values:
+- [x] Missing widget constructors in `render.star`: `Arc`, `Line`, `PieChart`, `Plot`, `Polygon`.
+- [x] Missing `render.fonts` map.
+- [x] Missing Pixlet-style widget attributes and methods on Starlark widget values:
   `size()`, `frame_count()`, child fields, layout fields, `Image.delay`, `Image.hold_frames`, etc.
-- [ ] `canvas` API is incomplete:
+- [x] `canvas` API is incomplete:
   `size()` is missing, `width(raw?)` and `height(raw?)` do not support `raw`, and current code relies on non-Pixlet `CANVAS_WIDTH` / `CANVAS_HEIGHT` constants.
-- [ ] Asset loading is incompatible with Pixlet:
+- [x] Asset loading is incompatible with Pixlet:
   `load("foo.png", foo = "file")` should return a file object with `path` and `readall(mode?)`, not a base64-encoded string wrapper.
 
 ### Critical binary/data incompatibilities
@@ -27,7 +27,7 @@ Scope for this audit:
   `decode()` currently forces UTF-8 and cannot return binary data.
 - [ ] `render.Image(src=...)` is incompatible:
   the runtime currently base64-decodes `src` again instead of consuming Pixlet-style raw bytes / raw SVG text.
-- [ ] Asset `readall("rb")` behavior is missing, which blocks binary image workflows used by reference Pixlet apps.
+- [x] Asset `readall("rb")` behavior is missing, which blocks binary image workflows used by reference Pixlet apps.
 - [ ] SVG input compatibility is incomplete because `render.Image` assumes a base64 payload instead of trying SVG/text/image decoders in Pixlet order.
 
 ### Runtime semantics gaps
@@ -61,7 +61,7 @@ Scope for this audit:
 
 - [x] Compare current Rust crates with `.reference/pixlet`.
 - [x] Write the compatibility TODO into the repository.
-- [ ] Keep this file updated as each phase lands.
+- [x] Keep this file updated as each phase lands.
 
 Suggested commit:
 
@@ -71,12 +71,12 @@ Suggested commit:
 
 Goal: make Starlark-side APIs look like Pixlet before changing deeper render internals.
 
-- [ ] Add missing widget constructors to `render.star`.
-- [ ] Add `render.fonts`.
-- [ ] Expose widget attrs/methods needed by Pixlet apps and Pixlet tests.
-- [ ] Make `canvas` support `width(raw?)`, `height(raw?)`, `size(raw?)`, `is2x()`.
-- [ ] Replace asset loading with a Pixlet-compatible file object.
-- [ ] Add runtime tests modeled after `.reference/pixlet/runtime/render_test.go` and asset loader tests from `.reference/pixlet/runtime/applet_test.go`.
+- [x] Add missing widget constructors to `render.star`.
+- [x] Add `render.fonts`.
+- [x] Expose widget attrs/methods needed by Pixlet apps and Pixlet tests.
+- [x] Make `canvas` support `width(raw?)`, `height(raw?)`, `size(raw?)`, `is2x()`.
+- [x] Replace asset loading with a Pixlet-compatible file object.
+- [x] Add runtime tests modeled after `.reference/pixlet/runtime/render_test.go` and asset loader tests from `.reference/pixlet/runtime/applet_test.go`.
 
 Suggested commit:
 

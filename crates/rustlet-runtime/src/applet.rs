@@ -6,7 +6,9 @@ use dupe::Dupe;
 use starlark::environment::{FrozenModule, Globals, GlobalsBuilder, Module};
 use starlark::eval::{Evaluator, FileLoader};
 use starlark::syntax::{AstModule, Dialect};
+use starlark::values::dict::AllocDict;
 use starlark::values::structs::AllocStruct;
+use starlark::values::Value;
 
 use rustlet_render::Root;
 
@@ -73,8 +75,8 @@ impl Applet {
         let http_frozen = build_simple_frozen_module("http", build_http_globals())?;
         let schema_frozen = build_simple_frozen_module("schema", build_schema_globals())?;
 
-        let ast = AstModule::parse(id, src.to_owned(), &Dialect::Standard)
-            .map_err(|e| anyhow!("{e}"))?;
+        let ast =
+            AstModule::parse(id, src.to_owned(), &Dialect::Standard).map_err(|e| anyhow!("{e}"))?;
 
         let module = Module::new();
 
@@ -132,6 +134,13 @@ fn build_render_frozen_module(width: u32, height: u32, is_2x: bool) -> Result<Fr
     // Inject canvas constants
     entries.push(("CANVAS_WIDTH", heap.alloc(width as i32)));
     entries.push(("CANVAS_HEIGHT", heap.alloc(height as i32)));
+    let font_list = rustlet_render::fonts::get_font_list();
+    let fonts_dict = heap.alloc(AllocDict(
+        font_list
+            .iter()
+            .map(|name| (*name, heap.alloc(*name) as Value)),
+    ));
+    entries.push(("fonts", fonts_dict));
 
     let render_struct = heap.alloc(AllocStruct(entries));
     module.set("render", render_struct);
@@ -150,14 +159,15 @@ fn build_render_frozen_module(width: u32, height: u32, is_2x: bool) -> Result<Fr
 
 /// Build a FrozenModule that exports a single named symbol wrapping all
 /// functions from the given Globals as struct attributes.
-fn build_simple_frozen_module(name: &str, globals: starlark::environment::Globals) -> Result<FrozenModule> {
+fn build_simple_frozen_module(
+    name: &str,
+    globals: starlark::environment::Globals,
+) -> Result<FrozenModule> {
     let module = Module::new();
     let heap = module.heap();
 
-    let entries: Vec<(&str, starlark::values::Value)> = globals
-        .iter()
-        .map(|(n, val)| (n, val.to_value()))
-        .collect();
+    let entries: Vec<(&str, starlark::values::Value)> =
+        globals.iter().map(|(n, val)| (n, val.to_value())).collect();
 
     let struct_val = heap.alloc(AllocStruct(entries));
     module.set(name, struct_val);
@@ -262,11 +272,16 @@ impl<'a> FileLoader for AppletFileLoader<'a> {
 
 fn build_asset_frozen_module(file_path: &Path) -> Result<FrozenModule> {
     let data = std::fs::read(file_path)?;
-    let encoded = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &data);
 
     let module = Module::new();
     let heap = module.heap();
-    module.set("file", heap.alloc(StarlarkFile { data: encoded }));
+    module.set(
+        "file",
+        heap.alloc(StarlarkFile {
+            path: file_path.to_string_lossy().to_string(),
+            data,
+        }),
+    );
 
     module
         .freeze()
@@ -333,11 +348,7 @@ mod tests {
     #[test]
     fn missing_main_errors() {
         let applet = Applet::new();
-        let src = concat!(
-            "load(\"render.star\", \"render\")\n",
-            "\n",
-            "x = 42\n",
-        );
+        let src = concat!("load(\"render.star\", \"render\")\n", "\n", "x = 42\n",);
         let config = HashMap::new();
         let result = applet.run("test.star", src, &config, 64, 32);
         match result {
@@ -652,6 +663,112 @@ mod tests {
         );
         let config = HashMap::new();
         let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn render_surface_compatibility() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"render.star\", \"render\")\n",
+            "\n",
+            "def main(config):\n",
+            "    if render.fonts[\"6x13\"] != \"6x13\":\n",
+            "        fail(\"missing fonts map\")\n",
+            "    b1 = render.Box(width = 64, height = 32, color = \"#000\")\n",
+            "    if b1.width != 64 or b1.height != 32 or b1.color != \"#000\":\n",
+            "        fail(\"box attrs broken\")\n",
+            "    if b1.frame_count() != 1:\n",
+            "        fail(\"box frame_count broken\")\n",
+            "    t1 = render.Text(content = \"foo\", font = render.fonts[\"6x13\"], color = \"#fff\", height = 10)\n",
+            "    if t1.font != \"6x13\" or t1.color != \"#fff\":\n",
+            "        fail(\"text attrs broken\")\n",
+            "    tw, th = t1.size()\n",
+            "    if tw <= 0 or th <= 0:\n",
+            "        fail(\"text size broken\")\n",
+            "    line = render.Line(x1 = 0, y1 = 0, x2 = 5, y2 = 5, width = 1, color = \"#fff\")\n",
+            "    arc = render.Arc(x = 5, y = 5, radius = 3, start_angle = 0, end_angle = 3.14, width = 1, color = \"#fff\")\n",
+            "    pie = render.PieChart(colors = [\"#fff\", \"#000\"], weights = [1, 2], diameter = 10)\n",
+            "    plot = render.Plot(data = [(0, 1), (1, 2)], width = 10, height = 8, chart_type = \"scatter\")\n",
+            "    poly = render.Polygon(vertices = [(0, 0), (2, 0), (1, 2)], fill_color = \"#f00\", stroke_width = 1)\n",
+            "    row = render.Row(children = [b1, t1, line, arc, pie, plot, poly], main_align = \"space_evenly\", cross_align = \"center\")\n",
+            "    if row.main_align != \"space_evenly\" or row.cross_align != \"center\":\n",
+            "        fail(\"row attrs broken\")\n",
+            "    if len(row.children) != 7:\n",
+            "        fail(\"row children broken\")\n",
+            "    root = render.Root(child = row)\n",
+            "    if len(root.child.children) != 7:\n",
+            "        fail(\"root child attrs broken\")\n",
+            "    return root\n",
+        );
+        let config = HashMap::new();
+        let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn canvas_helpers_match_pixlet_shape() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"render.star\", \"render\", \"canvas\")\n",
+            "\n",
+            "def main(config):\n",
+            "    if canvas.width() != 128 or canvas.height() != 64:\n",
+            "        fail(\"scaled canvas helpers broken\")\n",
+            "    if canvas.width(True) != 64 or canvas.height(True) != 32:\n",
+            "        fail(\"raw canvas helpers broken\")\n",
+            "    if canvas.size() != (128, 64):\n",
+            "        fail(\"canvas.size broken\")\n",
+            "    if canvas.size(True) != (64, 32):\n",
+            "        fail(\"canvas.size(raw) broken\")\n",
+            "    if not canvas.is2x():\n",
+            "        fail(\"canvas.is2x broken\")\n",
+            "    return render.Root(child = render.Text(\"ok\"))\n",
+        );
+        let config = HashMap::new();
+        let roots = applet
+            .run_with_options("test.star", src, &config, 128, 64, true, None)
+            .unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn file_readall_and_image_asset_loading() {
+        let applet = Applet::new();
+        let dir = tempfile::tempdir().unwrap();
+        let text_path = dir.path().join("hello.txt");
+        let image_path = dir.path().join("icon.png");
+
+        std::fs::write(&text_path, "hello world").unwrap();
+
+        let mut img = tiny_skia::Pixmap::new(1, 1).unwrap();
+        img.fill(tiny_skia::Color::from_rgba8(255, 0, 0, 255));
+        let png = img.encode_png().unwrap();
+        std::fs::write(&image_path, png).unwrap();
+
+        let src = format!(
+            concat!(
+                "load(\"hello.txt\", hello = \"file\")\n",
+                "load(\"icon.png\", icon = \"file\")\n",
+                "load(\"render.star\", \"render\")\n",
+                "\n",
+                "def main(config):\n",
+                "    if hello.readall() != \"hello world\":\n",
+                "        fail(\"text readall broken\")\n",
+                "    if hello.path != \"{}\":\n",
+                "        fail(\"file path broken\")\n",
+                "    img = render.Image(src = icon.readall())\n",
+                "    if img.size() != (1, 1):\n",
+                "        fail(\"binary image loading broken\")\n",
+                "    return render.Root(child = img)\n",
+            ),
+            text_path.to_string_lossy()
+        );
+
+        let config = HashMap::new();
+        let roots = applet
+            .run_with_options("main.star", &src, &config, 64, 32, false, Some(dir.path()))
+            .unwrap();
         assert_eq!(roots.len(), 1);
     }
 }

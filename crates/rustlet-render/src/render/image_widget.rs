@@ -1,10 +1,11 @@
-use super::{Rect, Widget, mod_int};
+use super::{mod_int, Rect, Widget};
 use anyhow::{Context, Result};
 use tiny_skia::Pixmap;
 
 pub struct ImageWidget {
     frames: Vec<Pixmap>,
     pub hold_frames: i32,
+    pub delay_ms: i32,
 }
 
 impl ImageWidget {
@@ -17,11 +18,11 @@ impl ImageWidget {
         let format = reader.format();
         let is_gif = matches!(format, Some(image::ImageFormat::Gif));
 
-        let raw_frames = if is_gif {
+        let (raw_frames, delay_ms) = if is_gif {
             decode_gif_frames(data)?
         } else {
             let img = reader.decode().context("failed to decode image")?;
-            vec![img]
+            (vec![img], 0)
         };
 
         let mut frames = Vec::with_capacity(raw_frames.len());
@@ -38,6 +39,7 @@ impl ImageWidget {
         Ok(Self {
             frames,
             hold_frames: 1,
+            delay_ms,
         })
     }
 
@@ -47,22 +49,36 @@ impl ImageWidget {
     }
 }
 
-fn decode_gif_frames(data: &[u8]) -> Result<Vec<image::DynamicImage>> {
+fn decode_gif_frames(data: &[u8]) -> Result<(Vec<image::DynamicImage>, i32)> {
     use image::codecs::gif::GifDecoder;
     use image::AnimationDecoder;
 
-    let decoder = GifDecoder::new(std::io::Cursor::new(data))
-        .context("failed to create GIF decoder")?;
-
+    let decoder =
+        GifDecoder::new(std::io::Cursor::new(data)).context("failed to create GIF decoder")?;
     let frames = decoder
         .into_frames()
         .collect_frames()
         .context("failed to decode GIF frames")?;
 
-    Ok(frames
-        .into_iter()
-        .map(|f| image::DynamicImage::ImageRgba8(f.into_buffer()))
-        .collect())
+    let delay_ms = frames
+        .first()
+        .map(|frame| {
+            let (numer, denom) = frame.delay().numer_denom_ms();
+            if denom == 0 {
+                0
+            } else {
+                (numer / denom) as i32
+            }
+        })
+        .unwrap_or(0);
+
+    Ok((
+        frames
+            .into_iter()
+            .map(|f| image::DynamicImage::ImageRgba8(f.into_buffer()))
+            .collect(),
+        delay_ms,
+    ))
 }
 
 fn maybe_resize(
@@ -105,8 +121,7 @@ fn maybe_resize(
 fn dynamic_image_to_pixmap(img: &image::DynamicImage) -> Result<Pixmap> {
     let rgba = img.to_rgba8();
     let (w, h) = (rgba.width(), rgba.height());
-    let mut pixmap = Pixmap::new(w, h)
-        .context("failed to create pixmap")?;
+    let mut pixmap = Pixmap::new(w, h).context("failed to create pixmap")?;
 
     let src = rgba.as_raw();
     let dst = pixmap.data_mut();
@@ -193,7 +208,9 @@ impl Widget for ImageWidget {
     }
 
     fn size(&self) -> Option<(i32, i32)> {
-        self.frames.first().map(|pm| (pm.width() as i32, pm.height() as i32))
+        self.frames
+            .first()
+            .map(|pm| (pm.width() as i32, pm.height() as i32))
     }
 }
 
@@ -203,7 +220,8 @@ mod tests {
 
     fn make_1x1_red_png() -> Vec<u8> {
         use image::{ImageBuffer, Rgba};
-        let img: ImageBuffer<Rgba<u8>, Vec<u8>> = ImageBuffer::from_pixel(1, 1, Rgba([255, 0, 0, 255]));
+        let img: ImageBuffer<Rgba<u8>, Vec<u8>> =
+            ImageBuffer::from_pixel(1, 1, Rgba([255, 0, 0, 255]));
         let mut buf = Vec::new();
         let mut cursor = std::io::Cursor::new(&mut buf);
         img.write_to(&mut cursor, image::ImageFormat::Png).unwrap();

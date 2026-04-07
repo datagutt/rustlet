@@ -1719,6 +1719,7 @@ dependencies = [
  "serde_json",
  "starlark",
  "starlark_derive",
+ "tempfile",
  "tiny-skia",
  "ureq",
 ]

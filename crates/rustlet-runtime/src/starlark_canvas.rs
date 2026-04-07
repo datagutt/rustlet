@@ -35,18 +35,55 @@ impl<'v> StarlarkValue<'v> for StarlarkCanvas {
 
 #[starlark::starlark_module]
 fn canvas_methods(builder: &mut MethodsBuilder) {
-    fn width(#[starlark(this)] this: Value) -> anyhow::Result<i32> {
+    fn width(
+        #[starlark(this)] this: Value,
+        #[starlark(default = false)] raw: bool,
+    ) -> anyhow::Result<i32> {
         let canvas = this
             .downcast_ref::<StarlarkCanvas>()
             .ok_or_else(|| anyhow::anyhow!("expected Canvas"))?;
-        Ok(canvas.width)
+        Ok(if raw && canvas.is_2x {
+            canvas.width / 2
+        } else {
+            canvas.width
+        })
     }
 
-    fn height(#[starlark(this)] this: Value) -> anyhow::Result<i32> {
+    fn height(
+        #[starlark(this)] this: Value,
+        #[starlark(default = false)] raw: bool,
+    ) -> anyhow::Result<i32> {
         let canvas = this
             .downcast_ref::<StarlarkCanvas>()
             .ok_or_else(|| anyhow::anyhow!("expected Canvas"))?;
-        Ok(canvas.height)
+        Ok(if raw && canvas.is_2x {
+            canvas.height / 2
+        } else {
+            canvas.height
+        })
+    }
+
+    fn size<'v>(
+        #[starlark(this)] this: Value<'v>,
+        #[starlark(default = false)] raw: bool,
+        eval: &mut starlark::eval::Evaluator<'v, '_, '_>,
+    ) -> anyhow::Result<Value<'v>> {
+        let canvas = this
+            .downcast_ref::<StarlarkCanvas>()
+            .ok_or_else(|| anyhow::anyhow!("expected Canvas"))?;
+        let width = if raw && canvas.is_2x {
+            canvas.width / 2
+        } else {
+            canvas.width
+        };
+        let height = if raw && canvas.is_2x {
+            canvas.height / 2
+        } else {
+            canvas.height
+        };
+        Ok(eval
+            .heap()
+            .alloc(starlark::values::tuple::AllocTuple([width, height])))
     }
 
     fn is2x(#[starlark(this)] this: Value) -> anyhow::Result<bool> {

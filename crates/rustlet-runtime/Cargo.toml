@@ -17,3 +17,6 @@ ureq = "3.3.0"
 dupe = "0.9.1"
 iana-time-zone = "0.1.65"
 jiff = "0.2.23"
+
+[dev-dependencies]
+tempfile = "3"
