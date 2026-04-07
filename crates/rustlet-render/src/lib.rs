@@ -8,6 +8,7 @@ pub use render::arc::Arc;
 pub use render::box_widget::BoxWidget;
 pub use render::circle::Circle;
 pub use render::column::Column;
+pub use render::emoji::Emoji;
 pub use render::image_widget::ImageWidget;
 pub use render::line::Line;
 pub use render::marquee::{Marquee, MarqueeAlign, ScrollDirection};

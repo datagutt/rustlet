@@ -18,6 +18,7 @@ pub mod stack;
 pub mod starfield;
 pub mod text;
 pub mod vector;
+pub mod emoji;
 pub mod wrapped_text;
 
 pub use root::Root;
