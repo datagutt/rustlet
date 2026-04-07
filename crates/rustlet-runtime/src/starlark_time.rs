@@ -202,7 +202,7 @@ fn time_methods(builder: &mut MethodsBuilder) {
             .downcast_ref::<StarlarkTime>()
             .ok_or_else(|| anyhow::anyhow!("expected Time"))?;
 
-        let offset = tz_offset(location)?;
+        let offset = tz_offset_at(location, t.unix_secs)?;
         let new_t = StarlarkTime {
             unix_secs: t.unix_secs,
             unix_nanos: t.unix_nanos,
@@ -213,73 +213,27 @@ fn time_methods(builder: &mut MethodsBuilder) {
     }
 }
 
-// Simplified timezone offset lookup for common IANA zones.
-// Returns UTC offset in seconds.
-fn tz_offset(name: &str) -> anyhow::Result<i32> {
-    let offset_hours: f32 = match name {
-        "UTC" | "GMT" | "Etc/UTC" | "Etc/GMT" => 0.0,
-        // US
-        "America/New_York" | "US/Eastern" | "EST" => -5.0,
-        "America/Chicago" | "US/Central" | "CST" => -6.0,
-        "America/Denver" | "US/Mountain" | "MST" => -7.0,
-        "America/Los_Angeles" | "US/Pacific" | "PST" => -8.0,
-        "America/Anchorage" | "US/Alaska" => -9.0,
-        "Pacific/Honolulu" | "US/Hawaii" => -10.0,
-        // Europe
-        "Europe/London" | "Europe/Dublin" | "Europe/Lisbon" => 0.0,
-        "Europe/Paris" | "Europe/Berlin" | "Europe/Rome" | "Europe/Madrid"
-        | "Europe/Amsterdam" | "Europe/Brussels" | "Europe/Vienna"
-        | "Europe/Zurich" | "Europe/Stockholm" | "Europe/Oslo"
-        | "Europe/Copenhagen" | "Europe/Warsaw" | "Europe/Prague"
-        | "Europe/Budapest" | "CET" => 1.0,
-        "Europe/Helsinki" | "Europe/Athens" | "Europe/Bucharest"
-        | "Europe/Istanbul" | "Europe/Kiev" | "Europe/Kyiv" | "EET" => 2.0,
-        "Europe/Moscow" | "Europe/Minsk" => 3.0,
-        // Asia
-        "Asia/Dubai" => 4.0,
-        "Asia/Kolkata" | "Asia/Calcutta" => 5.5,
-        "Asia/Dhaka" => 6.0,
-        "Asia/Bangkok" | "Asia/Jakarta" => 7.0,
-        "Asia/Shanghai" | "Asia/Hong_Kong" | "Asia/Singapore" | "Asia/Taipei" => 8.0,
-        "Asia/Tokyo" | "Asia/Seoul" => 9.0,
-        // Australia
-        "Australia/Sydney" | "Australia/Melbourne" => 10.0,
-        "Australia/Adelaide" => 9.5,
-        "Australia/Perth" => 8.0,
-        "Australia/Brisbane" => 10.0,
-        // Pacific
-        "Pacific/Auckland" | "NZ" => 12.0,
-        "Pacific/Fiji" => 12.0,
-        // South America
-        "America/Sao_Paulo" | "America/Argentina/Buenos_Aires" => -3.0,
-        "America/Santiago" => -4.0,
-        "America/Bogota" | "America/Lima" => -5.0,
-        // Africa
-        "Africa/Cairo" => 2.0,
-        "Africa/Lagos" | "Africa/Johannesburg" => 1.0,
-        "Africa/Nairobi" => 3.0,
-        // India
-        "Asia/Karachi" => 5.0,
-        // Canada
-        "America/Toronto" => -5.0,
-        "America/Vancouver" => -8.0,
-        "America/Edmonton" => -7.0,
-        "America/Winnipeg" => -6.0,
-        "America/Halifax" => -4.0,
-        "America/St_Johns" => -3.5,
-        // Other
-        "Asia/Kathmandu" => 5.75,
-        "Asia/Colombo" => 5.5,
-        "Asia/Yangon" => 6.5,
-        _ => {
-            // Try parsing fixed offset like "+05:00" or "-08:00"
-            if let Some(secs) = parse_fixed_offset(name) {
-                return Ok(secs);
-            }
-            return Err(anyhow::anyhow!("unknown timezone: {name}"));
-        }
-    };
-    Ok((offset_hours * 3600.0) as i32)
+// DST-aware timezone offset lookup using jiff's IANA timezone database.
+// Returns the current UTC offset in seconds for the given timezone at the given unix timestamp.
+fn tz_offset_at(name: &str, unix_secs: i64) -> anyhow::Result<i32> {
+    // Try fixed offset first (e.g. "+05:00", "-08:00")
+    if let Some(secs) = parse_fixed_offset(name) {
+        return Ok(secs);
+    }
+
+    let tz = jiff::tz::TimeZone::get(name)
+        .map_err(|_| anyhow::anyhow!("unknown timezone: {name}"))?;
+    let ts = jiff::Timestamp::from_second(unix_secs)
+        .map_err(|e| anyhow::anyhow!("invalid timestamp: {e}"))?;
+    let offset = tz.to_offset(ts);
+    Ok(offset.seconds())
+}
+
+pub fn is_known_timezone(name: &str) -> bool {
+    if parse_fixed_offset(name).is_some() {
+        return true;
+    }
+    jiff::tz::TimeZone::get(name).is_ok()
 }
 
 fn parse_fixed_offset(s: &str) -> Option<i32> {

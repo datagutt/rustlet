@@ -47,6 +47,17 @@ pub fn time_module(builder: &mut GlobalsBuilder) {
         Ok((nanos / 1_000_000) as i32)
     }
 
+    fn tz() -> anyhow::Result<String> {
+        Ok(detect_system_timezone())
+    }
+
+    fn is_valid_timezone(name: &str) -> anyhow::Result<bool> {
+        Ok(crate::starlark_time::is_known_timezone(name))
+    }
+}
+
+fn detect_system_timezone() -> String {
+    iana_time_zone::get_timezone().unwrap_or_else(|_| "UTC".to_string())
 }
 
 pub fn build_time_globals() -> starlark::environment::Globals {
