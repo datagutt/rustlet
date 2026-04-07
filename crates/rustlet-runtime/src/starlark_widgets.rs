@@ -1,13 +1,13 @@
 use std::fmt;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use allocative::Allocative;
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use starlark::starlark_simple_value;
 use starlark::values::{NoSerialize, ProvidesStaticType, StarlarkValue};
 use starlark_derive::starlark_value;
 
-use rustlet_render::Widget;
+use rustlet_render::{Rect, Widget};
 
 /// Optional Root-specific metadata stored alongside a widget when
 /// the Starlark-side constructor is `render.Root(...)`.
@@ -18,15 +18,34 @@ pub struct RootMeta {
     pub show_full_animation: bool,
 }
 
+/// Thin wrapper around `Arc<dyn Widget>` that implements Widget itself,
+/// allowing shared ownership so starlark values can be reused across
+/// multiple parent widgets.
+pub struct SharedWidget(pub Arc<dyn Widget>);
+
+impl Widget for SharedWidget {
+    fn paint_bounds(&self, bounds: Rect, frame_idx: i32) -> Rect {
+        self.0.paint_bounds(bounds, frame_idx)
+    }
+    fn paint(&self, pixmap: &mut tiny_skia::Pixmap, bounds: Rect, frame_idx: i32) {
+        self.0.paint(pixmap, bounds, frame_idx)
+    }
+    fn frame_count(&self, bounds: Rect) -> i32 {
+        self.0.frame_count(bounds)
+    }
+    fn size(&self) -> Option<(i32, i32)> {
+        self.0.size()
+    }
+}
+
 /// Wrapper that holds any render widget as a Starlark value.
 ///
-/// The inner widget can be taken out exactly once via `take_widget`.
-/// This allows the widget tree to be assembled in Starlark and then
-/// extracted into native Rust ownership for rendering.
+/// Widgets are stored behind Arc so they can be shared across multiple
+/// parent widgets (e.g. reusing the same Box in a loop).
 #[derive(ProvidesStaticType, NoSerialize, Allocative)]
 pub struct StarlarkWidget {
     #[allocative(skip)]
-    inner: Arc<Mutex<Option<Box<dyn Widget>>>>,
+    inner: Arc<dyn Widget>,
     type_name: String,
     #[allocative(skip)]
     root_meta: Option<RootMeta>,
@@ -37,7 +56,7 @@ starlark_simple_value!(StarlarkWidget);
 impl StarlarkWidget {
     pub fn new(widget: Box<dyn Widget>, type_name: &str) -> Self {
         Self {
-            inner: Arc::new(Mutex::new(Some(widget))),
+            inner: Arc::from(widget),
             type_name: type_name.to_string(),
             root_meta: None,
         }
@@ -45,7 +64,7 @@ impl StarlarkWidget {
 
     pub fn new_root(widget: Box<dyn Widget>, meta: RootMeta) -> Self {
         Self {
-            inner: Arc::new(Mutex::new(Some(widget))),
+            inner: Arc::from(widget),
             type_name: "Root".to_string(),
             root_meta: Some(meta),
         }
@@ -63,13 +82,10 @@ impl StarlarkWidget {
         &self.type_name
     }
 
-    /// Extract the inner widget, consuming it. Errors if already taken.
+    /// Get the widget as a Box<dyn Widget> via Arc sharing.
+    /// Can be called multiple times (widgets are reference-counted).
     pub fn take_widget(&self) -> Result<Box<dyn Widget>> {
-        self.inner
-            .lock()
-            .map_err(|e| anyhow!("lock poisoned: {e}"))?
-            .take()
-            .ok_or_else(|| anyhow!("widget ({}) already consumed", self.type_name))
+        Ok(Box::new(SharedWidget(Arc::clone(&self.inner))))
     }
 }
 
