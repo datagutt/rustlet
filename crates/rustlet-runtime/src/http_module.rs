@@ -1,3 +1,8 @@
+use std::collections::HashMap;
+use std::hash::{DefaultHasher, Hash, Hasher};
+use std::sync::{LazyLock, Mutex};
+use std::time::Instant;
+
 use ureq::http;
 
 use starlark::environment::GlobalsBuilder;
@@ -6,6 +11,70 @@ use starlark::values::dict::{AllocDict, DictRef};
 use starlark::values::structs::AllocStruct;
 use starlark::values::Value;
 use starlark::values::none::NoneType;
+
+// --- cache ---
+
+struct CachedResponse {
+    url: String,
+    status_code: u16,
+    status: String,
+    body: String,
+    headers: Vec<(String, String)>,
+    expires_at: Instant,
+}
+
+static HTTP_CACHE: LazyLock<Mutex<HashMap<u64, CachedResponse>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+fn cache_key(method: &str, url: &str, headers: &[(String, String)], body: &str) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    method.hash(&mut hasher);
+    url.hash(&mut hasher);
+    for (k, v) in headers {
+        k.hash(&mut hasher);
+        v.hash(&mut hasher);
+    }
+    body.hash(&mut hasher);
+    hasher.finish()
+}
+
+fn get_cached(key: u64) -> Option<CachedResponse> {
+    let mut cache = HTTP_CACHE.lock().ok()?;
+    if let Some(entry) = cache.get(&key) {
+        if Instant::now() < entry.expires_at {
+            return Some(CachedResponse {
+                url: entry.url.clone(),
+                status_code: entry.status_code,
+                status: entry.status.clone(),
+                body: entry.body.clone(),
+                headers: entry.headers.clone(),
+                expires_at: entry.expires_at,
+            });
+        }
+        cache.remove(&key);
+    }
+    None
+}
+
+fn put_cached(key: u64, resp: &CachedResponse) {
+    if let Ok(mut cache) = HTTP_CACHE.lock() {
+        // Evict expired entries if cache is getting large
+        if cache.len() > 256 {
+            let now = Instant::now();
+            cache.retain(|_, v| v.expires_at > now);
+        }
+        cache.insert(key, CachedResponse {
+            url: resp.url.clone(),
+            status_code: resp.status_code,
+            status: resp.status.clone(),
+            body: resp.body.clone(),
+            headers: resp.headers.clone(),
+            expires_at: resp.expires_at,
+        });
+    }
+}
+
+// --- helpers ---
 
 fn extract_string_dict(v: Value) -> anyhow::Result<Vec<(String, String)>> {
     if v.is_none() {
@@ -28,6 +97,23 @@ fn extract_string_dict(v: Value) -> anyhow::Result<Vec<(String, String)>> {
     Ok(out)
 }
 
+fn alloc_cached_response<'v>(
+    cached: &CachedResponse,
+    eval: &mut Evaluator<'v, '_, '_>,
+) -> Value<'v> {
+    let heap = eval.heap();
+    let headers_dict = heap.alloc(AllocDict(
+        cached.headers.iter().map(|(k, v)| (k.as_str(), v.as_str())),
+    ));
+    heap.alloc(AllocStruct([
+        ("url", heap.alloc(cached.url.as_str())),
+        ("status_code", heap.alloc(cached.status_code as i32)),
+        ("status", heap.alloc(cached.status.as_str())),
+        ("body", heap.alloc(cached.body.as_str())),
+        ("headers", headers_dict),
+    ]))
+}
+
 fn do_request<'v>(
     method: &str,
     url: &str,
@@ -35,6 +121,7 @@ fn do_request<'v>(
     body: &str,
     json_body: Value<'v>,
     params: Value<'v>,
+    ttl_seconds: i32,
     eval: &mut Evaluator<'v, '_, '_>,
 ) -> anyhow::Result<Value<'v>> {
     let mut final_url = url.to_string();
@@ -50,7 +137,21 @@ fn do_request<'v>(
     }
 
     let header_pairs = extract_string_dict(headers)?;
+    let body_str = if !json_body.is_none() {
+        json_body.unpack_str().unwrap_or("").to_string()
+    } else {
+        body.to_string()
+    };
 
+    // Check cache
+    let key = cache_key(method, &final_url, &header_pairs, &body_str);
+    if ttl_seconds > 0 {
+        if let Some(cached) = get_cached(key) {
+            return Ok(alloc_cached_response(&cached, eval));
+        }
+    }
+
+    // Make the actual request
     let has_body = !body.is_empty() || !json_body.is_none();
 
     let response = if has_body {
@@ -63,12 +164,11 @@ fn do_request<'v>(
         for (k, v) in &header_pairs {
             req = req.header(k.as_str(), v.as_str());
         }
-        if !body.is_empty() {
-            req.send(body.as_bytes())
-        } else {
-            let json_str = json_body.unpack_str().unwrap_or("");
+        if !json_body.is_none() {
             req.header("Content-Type", "application/json")
-                .send(json_str.as_bytes())
+                .send(body_str.as_bytes())
+        } else {
+            req.send(body_str.as_bytes())
         }
     } else {
         let mut req = match method {
@@ -85,43 +185,48 @@ fn do_request<'v>(
     };
 
     match response {
-        Ok(res) => build_response(res, &final_url, eval),
+        Ok(res) => {
+            let status_code = res.status().as_u16();
+            let status_text = http_status_text(status_code);
+            let status = format!("{status_code} {status_text}");
+
+            let mut resp_headers: Vec<(String, String)> = Vec::new();
+            for (name, value) in res.headers() {
+                if let Ok(v) = value.to_str() {
+                    resp_headers.push((name.to_string(), v.to_string()));
+                }
+            }
+
+            let resp_body = res.into_body().read_to_string()?;
+
+            // Store in cache if ttl > 0
+            if ttl_seconds > 0 {
+                let cached = CachedResponse {
+                    url: final_url.clone(),
+                    status_code,
+                    status: status.clone(),
+                    body: resp_body.clone(),
+                    headers: resp_headers.clone(),
+                    expires_at: Instant::now() + std::time::Duration::from_secs(ttl_seconds as u64),
+                };
+                put_cached(key, &cached);
+            }
+
+            let heap = eval.heap();
+            let headers_dict = heap.alloc(AllocDict(
+                resp_headers.iter().map(|(k, v)| (k.as_str(), v.as_str())),
+            ));
+            let resp = heap.alloc(AllocStruct([
+                ("url", heap.alloc(final_url.as_str())),
+                ("status_code", heap.alloc(status_code as i32)),
+                ("status", heap.alloc(status.as_str())),
+                ("body", heap.alloc(resp_body.as_str())),
+                ("headers", headers_dict),
+            ]));
+            Ok(resp)
+        }
         Err(e) => Err(anyhow::anyhow!("HTTP request failed: {e}")),
     }
-}
-
-fn build_response<'v>(
-    res: http::Response<ureq::Body>,
-    url: &str,
-    eval: &mut Evaluator<'v, '_, '_>,
-) -> anyhow::Result<Value<'v>> {
-    let status_code = res.status().as_u16();
-    let status_text = http_status_text(status_code);
-
-    let mut resp_headers: Vec<(String, String)> = Vec::new();
-    for (name, value) in res.headers() {
-        if let Ok(v) = value.to_str() {
-            resp_headers.push((name.to_string(), v.to_string()));
-        }
-    }
-
-    let body_str = res.into_body().read_to_string()?;
-
-    let heap = eval.heap();
-    let headers_dict = heap.alloc(AllocDict(
-        resp_headers
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.as_str())),
-    ));
-
-    let resp = heap.alloc(AllocStruct([
-        ("url", heap.alloc(url)),
-        ("status_code", heap.alloc(status_code as i32)),
-        ("status", heap.alloc(format!("{status_code} {status_text}").as_str())),
-        ("body", heap.alloc(body_str.as_str())),
-        ("headers", headers_dict),
-    ]));
-    Ok(resp)
 }
 
 fn url_encode(s: &str) -> String {
@@ -170,9 +275,10 @@ pub fn http_module(builder: &mut GlobalsBuilder) {
         url: &str,
         #[starlark(default = NoneType)] params: Value<'v>,
         #[starlark(default = NoneType)] headers: Value<'v>,
+        #[starlark(default = 0)] ttl_seconds: i32,
         eval: &mut Evaluator<'v, '_, '_>,
     ) -> anyhow::Result<Value<'v>> {
-        do_request("GET", url, headers, "", Value::new_none(), params, eval)
+        do_request("GET", url, headers, "", Value::new_none(), params, ttl_seconds, eval)
     }
 
     fn post<'v>(
@@ -181,9 +287,10 @@ pub fn http_module(builder: &mut GlobalsBuilder) {
         #[starlark(default = NoneType)] headers: Value<'v>,
         #[starlark(default = "")] body: &str,
         #[starlark(default = NoneType)] json_body: Value<'v>,
+        #[starlark(default = 0)] ttl_seconds: i32,
         eval: &mut Evaluator<'v, '_, '_>,
     ) -> anyhow::Result<Value<'v>> {
-        do_request("POST", url, headers, body, json_body, params, eval)
+        do_request("POST", url, headers, body, json_body, params, ttl_seconds, eval)
     }
 
     fn put<'v>(
@@ -192,18 +299,20 @@ pub fn http_module(builder: &mut GlobalsBuilder) {
         #[starlark(default = NoneType)] headers: Value<'v>,
         #[starlark(default = "")] body: &str,
         #[starlark(default = NoneType)] json_body: Value<'v>,
+        #[starlark(default = 0)] ttl_seconds: i32,
         eval: &mut Evaluator<'v, '_, '_>,
     ) -> anyhow::Result<Value<'v>> {
-        do_request("PUT", url, headers, body, json_body, params, eval)
+        do_request("PUT", url, headers, body, json_body, params, ttl_seconds, eval)
     }
 
     fn delete<'v>(
         url: &str,
         #[starlark(default = NoneType)] params: Value<'v>,
         #[starlark(default = NoneType)] headers: Value<'v>,
+        #[starlark(default = 0)] ttl_seconds: i32,
         eval: &mut Evaluator<'v, '_, '_>,
     ) -> anyhow::Result<Value<'v>> {
-        do_request("DELETE", url, headers, "", Value::new_none(), params, eval)
+        do_request("DELETE", url, headers, "", Value::new_none(), params, ttl_seconds, eval)
     }
 
     fn patch<'v>(
@@ -212,9 +321,10 @@ pub fn http_module(builder: &mut GlobalsBuilder) {
         #[starlark(default = NoneType)] headers: Value<'v>,
         #[starlark(default = "")] body: &str,
         #[starlark(default = NoneType)] json_body: Value<'v>,
+        #[starlark(default = 0)] ttl_seconds: i32,
         eval: &mut Evaluator<'v, '_, '_>,
     ) -> anyhow::Result<Value<'v>> {
-        do_request("PATCH", url, headers, body, json_body, params, eval)
+        do_request("PATCH", url, headers, body, json_body, params, ttl_seconds, eval)
     }
 }
 

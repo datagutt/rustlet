@@ -1,10 +1,11 @@
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Result};
+use dupe::Dupe;
 use starlark::environment::{FrozenModule, Globals, GlobalsBuilder, Module};
-use starlark::eval::{Evaluator, ReturnFileLoader};
+use starlark::eval::{Evaluator, FileLoader};
 use starlark::syntax::{AstModule, Dialect};
-use starlark::values::dict::AllocDict;
 use starlark::values::structs::AllocStruct;
 
 use rustlet_render::Root;
@@ -17,7 +18,9 @@ use crate::json_module::build_json_globals;
 use crate::math_module::build_math_globals;
 use crate::random_module::build_random_globals;
 use crate::render_module::build_render_globals;
+use crate::schema_module::build_schema_globals;
 use crate::starlark_canvas::StarlarkCanvas;
+use crate::starlark_config::StarlarkConfig;
 use crate::starlark_widgets::StarlarkWidget;
 use crate::time_module::build_time_globals;
 
@@ -45,7 +48,7 @@ impl Applet {
         width: u32,
         height: u32,
     ) -> Result<Vec<Root>> {
-        self.run_with_options(id, src, config, width, height, false)
+        self.run_with_options(id, src, config, width, height, false, None)
     }
 
     pub fn run_with_options(
@@ -56,6 +59,7 @@ impl Applet {
         width: u32,
         height: u32,
         is_2x: bool,
+        base_dir: Option<&Path>,
     ) -> Result<Vec<Root>> {
         let render_frozen = build_render_frozen_module(width, height, is_2x)?;
         let time_frozen = build_simple_frozen_module("time", build_time_globals())?;
@@ -66,6 +70,7 @@ impl Applet {
         let color_frozen = build_simple_frozen_module("color", build_color_globals())?;
         let humanize_frozen = build_simple_frozen_module("humanize", build_humanize_globals())?;
         let http_frozen = build_simple_frozen_module("http", build_http_globals())?;
+        let schema_frozen = build_simple_frozen_module("schema", build_schema_globals())?;
 
         let ast = AstModule::parse(id, src.to_owned(), &Dialect::Standard)
             .map_err(|e| anyhow!("{e}"))?;
@@ -82,8 +87,10 @@ impl Applet {
         modules_map.insert("color.star", &color_frozen);
         modules_map.insert("humanize.star", &humanize_frozen);
         modules_map.insert("http.star", &http_frozen);
-        let loader = ReturnFileLoader {
-            modules: &modules_map,
+        modules_map.insert("schema.star", &schema_frozen);
+        let loader = AppletFileLoader {
+            modules: modules_map,
+            base_dir: base_dir.map(|p| p.to_path_buf()),
         };
 
         let mut eval = Evaluator::new(&module);
@@ -96,8 +103,9 @@ impl Applet {
             .ok_or_else(|| anyhow!("script does not define a `main` function"))?;
 
         let heap = module.heap();
-        let config_val =
-            heap.alloc(AllocDict(config.iter().map(|(k, v)| (k.as_str(), v.as_str()))));
+        let config_val = heap.alloc(StarlarkConfig {
+            entries: config.clone(),
+        });
 
         let result = eval
             .eval_function(main_val, &[config_val], &[])
@@ -222,6 +230,46 @@ fn extract_single_root(sw: &StarlarkWidget) -> Result<Root> {
     root.max_age = meta.max_age;
     root.show_full_animation = meta.show_full_animation;
     Ok(root)
+}
+
+/// File loader that resolves known modules first, then loads asset files from disk.
+struct AppletFileLoader<'a> {
+    modules: HashMap<&'a str, &'a FrozenModule>,
+    base_dir: Option<PathBuf>,
+}
+
+impl<'a> FileLoader for AppletFileLoader<'a> {
+    fn load(&self, path: &str) -> starlark::Result<FrozenModule> {
+        // Check known modules first
+        if let Some(module) = self.modules.get(path) {
+            return Ok((*module).dupe());
+        }
+
+        // Try loading as an asset file relative to the star file's directory
+        if let Some(ref base) = self.base_dir {
+            let file_path = base.join(path);
+            if file_path.exists() {
+                return build_asset_frozen_module(&file_path).map_err(starlark::Error::new_other);
+            }
+        }
+
+        Err(starlark::Error::new_other(anyhow!(
+            "module not found: {path}"
+        )))
+    }
+}
+
+fn build_asset_frozen_module(file_path: &Path) -> Result<FrozenModule> {
+    let data = std::fs::read(file_path)?;
+    let encoded = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &data);
+
+    let module = Module::new();
+    let heap = module.heap();
+    module.set("file", heap.alloc(encoded.as_str()));
+
+    module
+        .freeze()
+        .map_err(|e| anyhow!("failed to freeze asset module: {e:?}"))
 }
 
 #[cfg(test)]

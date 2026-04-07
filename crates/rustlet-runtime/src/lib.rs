@@ -1,6 +1,7 @@
 mod starlark_widgets;
 mod starlark_color;
 mod starlark_canvas;
+mod starlark_config;
 pub mod starlark_time;
 mod render_module;
 mod color_module;
@@ -11,6 +12,7 @@ mod math_module;
 mod random_module;
 mod humanize_module;
 mod http_module;
+mod schema_module;
 mod applet;
 
 pub use applet::Applet;
