@@ -1,0 +1,11 @@
+[package]
+name = "rustlet-cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rustlet-render = { path = "../rustlet-render" }
+rustlet-runtime = { path = "../rustlet-runtime" }
+rustlet-encode = { path = "../rustlet-encode" }
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"

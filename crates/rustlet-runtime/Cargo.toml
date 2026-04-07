@@ -1,0 +1,13 @@
+[package]
+name = "rustlet-runtime"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rustlet-render = { path = "../rustlet-render" }
+starlark = "0.13"
+allocative = "0.3"
+derive_more = "1"
+anyhow = "1"
+base64 = "0.22"
+tiny-skia = "0.11"

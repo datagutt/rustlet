@@ -1,0 +1,13 @@
+[package]
+name = "rustlet-render"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tiny-skia = "0.11"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif"] }
+color-name = "1"
+anyhow = "1"
+
+[dev-dependencies]
+insta = "1"
