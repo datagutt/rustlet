@@ -90,6 +90,7 @@ Goal: make the runtime behave like Pixlet for data flow and module contracts.
 - [x] Make `render.Image` accept Pixlet-style raw bytes / SVG text and expose `delay` / `hold_frames`.
 - [x] Fix `random.star` behavior and API.
 - [x] Close high-impact gaps in `color.star`.
+- [x] Load local `.star` dependencies with Pixlet-style caching, relative resolution, private export checks, and cycle detection.
 - [x] Add compatibility tests for binary image loading, random determinism, color mutation, and SVG image loading.
 
 Suggested commit:

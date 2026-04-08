@@ -1,31 +1,19 @@
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::{anyhow, Result};
-use dupe::Dupe;
-use starlark::environment::{FrozenModule, Globals, GlobalsBuilder, Module};
-use starlark::eval::{Evaluator, FileLoader};
+use starlark::environment::{Globals, GlobalsBuilder, Module};
+use starlark::eval::Evaluator;
 use starlark::syntax::{AstModule, Dialect};
-use starlark::values::dict::AllocDict;
-use starlark::values::structs::AllocStruct;
-use starlark::values::Value;
 
 use rustlet_render::Root;
 
-use crate::base64_module::build_base64_globals;
-use crate::color_module::build_color_globals;
-use crate::http_module::{build_http_globals, set_request_context};
-use crate::humanize_module::build_humanize_globals;
-use crate::json_module::build_json_globals;
-use crate::math_module::build_math_globals;
-use crate::random_module::{build_random_globals, seed_for_execution};
-use crate::render_module::{build_render_globals, set_render_context};
-use crate::schema_module::build_schema_globals;
-use crate::starlark_canvas::StarlarkCanvas;
+use crate::http_module::set_request_context;
+use crate::module_loader::BuiltinModuleRegistry;
+use crate::random_module::seed_for_execution;
+use crate::render_module::set_render_context;
 use crate::starlark_config::StarlarkConfig;
-use crate::starlark_file::StarlarkFile;
 use crate::starlark_widgets::StarlarkWidget;
-use crate::time_module::build_time_globals;
 
 pub struct Applet {
     globals: Globals,
@@ -33,9 +21,7 @@ pub struct Applet {
 
 impl Applet {
     pub fn new() -> Self {
-        let globals = GlobalsBuilder::standard()
-            .with(crate::render_module::render_module)
-            .build();
+        let globals = GlobalsBuilder::standard().build();
         Self { globals }
     }
 
@@ -68,37 +54,13 @@ impl Applet {
         set_request_context(id);
         set_render_context(is_2x);
 
-        let render_frozen = build_render_frozen_module(width, height, is_2x)?;
-        let time_frozen = build_simple_frozen_module("time", build_time_globals())?;
-        let base64_frozen = build_simple_frozen_module("base64", build_base64_globals())?;
-        let json_frozen = build_simple_frozen_module("json", build_json_globals())?;
-        let math_frozen = build_math_frozen_module()?;
-        let random_frozen = build_simple_frozen_module("random", build_random_globals())?;
-        let color_frozen = build_simple_frozen_module("color", build_color_globals())?;
-        let humanize_frozen = build_simple_frozen_module("humanize", build_humanize_globals())?;
-        let http_frozen = build_simple_frozen_module("http", build_http_globals())?;
-        let schema_frozen = build_simple_frozen_module("schema", build_schema_globals())?;
+        let registry = BuiltinModuleRegistry::new(width, height, is_2x)?;
 
         let ast =
             AstModule::parse(id, src.to_owned(), &Dialect::Standard).map_err(|e| anyhow!("{e}"))?;
 
         let module = Module::new();
-
-        let mut modules_map: HashMap<&str, &FrozenModule> = HashMap::new();
-        modules_map.insert("render.star", &render_frozen);
-        modules_map.insert("time.star", &time_frozen);
-        modules_map.insert("encoding/base64.star", &base64_frozen);
-        modules_map.insert("encoding/json.star", &json_frozen);
-        modules_map.insert("math.star", &math_frozen);
-        modules_map.insert("random.star", &random_frozen);
-        modules_map.insert("color.star", &color_frozen);
-        modules_map.insert("humanize.star", &humanize_frozen);
-        modules_map.insert("http.star", &http_frozen);
-        modules_map.insert("schema.star", &schema_frozen);
-        let loader = AppletFileLoader {
-            modules: modules_map,
-            base_dir: base_dir.map(|p| p.to_path_buf()),
-        };
+        let loader = registry.loader(&self.globals, base_dir);
 
         let mut eval = Evaluator::new(&module);
         eval.set_loader(&loader);
@@ -120,90 +82,6 @@ impl Applet {
 
         extract_roots(result)
     }
-}
-
-/// Build a FrozenModule for "render.star" that exports a single `render` symbol
-/// containing all widget constructors plus canvas constants.
-fn build_render_frozen_module(width: u32, height: u32, is_2x: bool) -> Result<FrozenModule> {
-    let render_globals = build_render_globals();
-
-    let module = Module::new();
-    let heap = module.heap();
-
-    let mut entries: Vec<(&str, starlark::values::Value)> = render_globals
-        .iter()
-        .map(|(name, val)| (name, val.to_value()))
-        .collect();
-
-    // Inject canvas constants
-    entries.push(("CANVAS_WIDTH", heap.alloc(width as i32)));
-    entries.push(("CANVAS_HEIGHT", heap.alloc(height as i32)));
-    let font_list = rustlet_render::fonts::get_font_list();
-    let fonts_dict = heap.alloc(AllocDict(
-        font_list
-            .iter()
-            .map(|name| (*name, heap.alloc(*name) as Value)),
-    ));
-    entries.push(("fonts", fonts_dict));
-
-    let render_struct = heap.alloc(AllocStruct(entries));
-    module.set("render", render_struct);
-
-    let canvas = heap.alloc(StarlarkCanvas {
-        width: width as i32,
-        height: height as i32,
-        is_2x,
-    });
-    module.set("canvas", canvas);
-
-    module
-        .freeze()
-        .map_err(|e| anyhow!("failed to freeze render module: {e:?}"))
-}
-
-/// Build a FrozenModule that exports a single named symbol wrapping all
-/// functions from the given Globals as struct attributes.
-fn build_simple_frozen_module(
-    name: &str,
-    globals: starlark::environment::Globals,
-) -> Result<FrozenModule> {
-    let module = Module::new();
-    let heap = module.heap();
-
-    let entries: Vec<(&str, starlark::values::Value)> =
-        globals.iter().map(|(n, val)| (n, val.to_value())).collect();
-
-    let struct_val = heap.alloc(AllocStruct(entries));
-    module.set(name, struct_val);
-
-    module
-        .freeze()
-        .map_err(|e| anyhow!("failed to freeze {name} module: {e:?}"))
-}
-
-/// Build math module with float constants alongside functions.
-fn build_math_frozen_module() -> Result<FrozenModule> {
-    use starlark::values::float::StarlarkFloat;
-
-    let math_globals = build_math_globals();
-
-    let module = Module::new();
-    let heap = module.heap();
-
-    let mut entries: Vec<(&str, starlark::values::Value)> = math_globals
-        .iter()
-        .map(|(name, val)| (name, val.to_value()))
-        .collect();
-
-    entries.push(("pi", heap.alloc(StarlarkFloat(std::f64::consts::PI))));
-    entries.push(("e", heap.alloc(StarlarkFloat(std::f64::consts::E))));
-
-    let struct_val = heap.alloc(AllocStruct(entries));
-    module.set("math", struct_val);
-
-    module
-        .freeze()
-        .map_err(|e| anyhow!("failed to freeze math module: {e:?}"))
 }
 
 /// Convert a Starlark return value (single Root widget or list of them) into Vec<Root>.
@@ -245,51 +123,6 @@ fn extract_single_root(sw: &StarlarkWidget) -> Result<Root> {
     root.max_age = meta.max_age;
     root.show_full_animation = meta.show_full_animation;
     Ok(root)
-}
-
-/// File loader that resolves known modules first, then loads asset files from disk.
-struct AppletFileLoader<'a> {
-    modules: HashMap<&'a str, &'a FrozenModule>,
-    base_dir: Option<PathBuf>,
-}
-
-impl<'a> FileLoader for AppletFileLoader<'a> {
-    fn load(&self, path: &str) -> starlark::Result<FrozenModule> {
-        // Check known modules first
-        if let Some(module) = self.modules.get(path) {
-            return Ok((*module).dupe());
-        }
-
-        // Try loading as an asset file relative to the star file's directory
-        if let Some(ref base) = self.base_dir {
-            let file_path = base.join(path);
-            if file_path.exists() {
-                return build_asset_frozen_module(&file_path).map_err(starlark::Error::new_other);
-            }
-        }
-
-        Err(starlark::Error::new_other(anyhow!(
-            "module not found: {path}"
-        )))
-    }
-}
-
-fn build_asset_frozen_module(file_path: &Path) -> Result<FrozenModule> {
-    let data = std::fs::read(file_path)?;
-
-    let module = Module::new();
-    let heap = module.heap();
-    module.set(
-        "file",
-        heap.alloc(StarlarkFile {
-            path: file_path.to_string_lossy().to_string(),
-            data,
-        }),
-    );
-
-    module
-        .freeze()
-        .map_err(|e| anyhow!("failed to freeze asset module: {e:?}"))
 }
 
 #[cfg(test)]
@@ -1044,6 +877,167 @@ mod tests {
         let config = HashMap::new();
         let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
         assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn local_star_dependency_loading_matches_pixlet_shape() {
+        let applet = Applet::new();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("hello.star"),
+            concat!(
+                "def _world():\n",
+                "    return \"hello world\"\n",
+                "\n",
+                "def world():\n",
+                "    return _world()\n",
+            ),
+        )
+        .unwrap();
+
+        let src = concat!(
+            "load(\"render.star\", \"render\")\n",
+            "load(\"hello.star\", \"world\")\n",
+            "\n",
+            "def main(config):\n",
+            "    if world() != \"hello world\":\n",
+            "        fail(\"dependency module broken\")\n",
+            "    return render.Root(child = render.Text(world()))\n",
+        );
+
+        let config = HashMap::new();
+        let roots = applet
+            .run_with_options("main.star", src, &config, 64, 32, false, Some(dir.path()))
+            .unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn local_star_private_symbols_are_not_exported() {
+        let applet = Applet::new();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("hello.star"),
+            concat!(
+                "def _world():\n",
+                "    return \"hello world\"\n",
+                "\n",
+                "def world():\n",
+                "    return _world()\n",
+            ),
+        )
+        .unwrap();
+
+        let src = concat!(
+            "load(\"render.star\", \"render\")\n",
+            "load(\"hello.star\", \"_world\")\n",
+            "\n",
+            "def main(config):\n",
+            "    return render.Root(child = render.Text(_world()))\n",
+        );
+
+        let config = HashMap::new();
+        let err = applet
+            .run_with_options("main.star", src, &config, 64, 32, false, Some(dir.path()))
+            .err()
+            .unwrap();
+        assert!(
+            err.to_string().contains("private symbol"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn nested_star_modules_resolve_relative_loads() {
+        let applet = Applet::new();
+        let dir = tempfile::tempdir().unwrap();
+        let subdir = dir.path().join("sub");
+        std::fs::create_dir(&subdir).unwrap();
+        std::fs::write(
+            subdir.join("util.star"),
+            concat!("def message():\n", "    return \"nested hello\"\n",),
+        )
+        .unwrap();
+        std::fs::write(
+            subdir.join("hello.star"),
+            concat!(
+                "load(\"util.star\", \"message\")\n",
+                "\n",
+                "def world():\n",
+                "    return message()\n",
+            ),
+        )
+        .unwrap();
+
+        let src = concat!(
+            "load(\"render.star\", \"render\")\n",
+            "load(\"sub/hello.star\", \"world\")\n",
+            "\n",
+            "def main(config):\n",
+            "    return render.Root(child = render.Text(world()))\n",
+        );
+
+        let config = HashMap::new();
+        let roots = applet
+            .run_with_options("main.star", src, &config, 64, 32, false, Some(dir.path()))
+            .unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn local_star_circular_dependency_errors() {
+        let applet = Applet::new();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("a.star"),
+            concat!(
+                "load(\"b.star\", \"b\")\n",
+                "def a():\n",
+                "    return b.b()\n",
+            ),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("b.star"),
+            concat!(
+                "load(\"a.star\", \"a\")\n",
+                "def b():\n",
+                "    return a.a()\n",
+            ),
+        )
+        .unwrap();
+
+        let src = concat!(
+            "load(\"render.star\", \"render\")\n",
+            "load(\"a.star\", \"a\")\n",
+            "\n",
+            "def main(config):\n",
+            "    return render.Root(child = render.Text(a.a()))\n",
+        );
+
+        let config = HashMap::new();
+        let err = applet
+            .run_with_options("main.star", src, &config, 64, 32, false, Some(dir.path()))
+            .err()
+            .unwrap();
+        assert!(
+            err.to_string().contains("circular dependency"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn render_requires_explicit_load() {
+        let applet = Applet::new();
+        let src = concat!("def main(config):\n", "    return Root(child = Box())\n",);
+
+        let config = HashMap::new();
+        let err = applet.run("test.star", src, &config, 64, 32).err().unwrap();
+        let err_text = err.to_string();
+        assert!(
+            err_text.contains("Root") || err_text.contains("name"),
+            "unexpected error: {err}"
+        );
     }
 
     #[test]
