@@ -6,6 +6,7 @@ pub mod box_widget;
 pub mod circle;
 pub mod column;
 pub mod emoji;
+mod emoji_atlas;
 pub mod image_widget;
 pub mod line;
 pub mod marquee;

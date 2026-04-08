@@ -905,11 +905,11 @@ pub fn render_module(builder: &mut GlobalsBuilder) {
 
     fn Emoji<'v>(
         emoji: &str,
-        #[starlark(default = 20)] width: i32,
-        #[starlark(default = 20)] height: i32,
+        #[starlark(default = 0)] width: i32,
+        #[starlark(default = 0)] height: i32,
         eval: &mut Evaluator<'v, '_, '_>,
     ) -> anyhow::Result<Value<'v>> {
-        let widget = Emoji::new(emoji, width, height);
+        let widget = Emoji::new(emoji, width, height)?;
         let attrs = vec![
             attr("emoji", WidgetAttrValue::String(emoji.to_string())),
             attr("width", WidgetAttrValue::Int(width)),

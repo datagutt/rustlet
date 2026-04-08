@@ -2,7 +2,10 @@ use std::path::Path;
 use std::sync::Mutex;
 use std::sync::OnceLock;
 
+use super::emoji_atlas;
 use super::{Rect, Widget};
+use anyhow::Context;
+use image::RgbaImage;
 use tiny_skia::Pixmap;
 
 static TWEMOJI_DIR: OnceLock<Mutex<Option<String>>> = OnceLock::new();
@@ -30,49 +33,50 @@ impl Emoji {
     }
 
     /// Create an emoji widget from a Unicode emoji string.
-    /// Looks up the Twemoji SVG from the configured directory.
-    /// Falls back to a colored placeholder if no directory is set or file not found.
-    pub fn new(emoji_str: &str, width: i32, height: i32) -> Self {
-        let codepoint = Self::emoji_to_codepoint(emoji_str);
+    /// Uses the built-in Pixlet-style emoji atlas by default and optional SVG overrides
+    /// from `twemoji_dir` when configured.
+    pub fn new(emoji_str: &str, width: i32, height: i32) -> anyhow::Result<Self> {
+        if height < 0 {
+            anyhow::bail!("emoji height must not be negative, got {height}");
+        }
 
-        // Try loading from twemoji directory
-        if let Some(dir) = Self::twemoji_dir() {
+        if width < 0 {
+            anyhow::bail!("emoji width must not be negative, got {width}");
+        }
+
+        if emoji_str.is_empty() {
+            anyhow::bail!("emoji string cannot be empty");
+        }
+
+        let pixmap = if let Some(dir) = Self::twemoji_dir() {
+            let codepoint = Self::emoji_to_codepoint(emoji_str);
             let svg_path = Path::new(&dir).join(format!("{codepoint}.svg"));
             if let Ok(svg_data) = std::fs::read_to_string(&svg_path) {
-                return Self::from_svg(&svg_data, width, height);
+                render_svg_scaled(&svg_data, width, height)?
+            } else {
+                let (src, _) = emoji_atlas::widget_rgba(emoji_str);
+                scale_emoji_image(&src, width, height)?
             }
-        }
-
-        // Fallback: colored placeholder
-        let hash = emoji_str
-            .chars()
-            .fold(0u32, |acc, c| acc.wrapping_mul(31).wrapping_add(c as u32));
-
-        let r = ((hash >> 16) & 0xFF) as u8;
-        let g = ((hash >> 8) & 0xFF) as u8;
-        let b = (hash & 0xFF) as u8;
-        let a = 255u8;
-
-        let pixmap = create_solid_pixmap(width as u32, height as u32, r, g, b, a);
-
-        Self {
-            pixmap,
-            width,
-            height,
-        }
+        } else {
+            let (src, _) = emoji_atlas::widget_rgba(emoji_str);
+            scale_emoji_image(&src, width, height)?
+        };
+        let widget = Self {
+            width: pixmap.width() as i32,
+            height: pixmap.height() as i32,
+            pixmap: Some(pixmap),
+        };
+        Ok(widget)
     }
 
     /// Create an emoji widget by rendering SVG data via resvg.
-    /// Falls back to a magenta placeholder if rendering fails.
-    pub fn from_svg(svg_data: &str, width: i32, height: i32) -> Self {
-        let pixmap = render_svg(svg_data, width as u32, height as u32)
-            .or_else(|| create_solid_pixmap(width as u32, height as u32, 255, 0, 255, 255));
-
-        Self {
-            pixmap,
-            width,
-            height,
-        }
+    pub fn from_svg(svg_data: &str, width: i32, height: i32) -> anyhow::Result<Self> {
+        let pixmap = render_svg_scaled(svg_data, width, height)?;
+        Ok(Self {
+            width: pixmap.width() as i32,
+            height: pixmap.height() as i32,
+            pixmap: Some(pixmap),
+        })
     }
 
     /// Convert an emoji string to a Twemoji-style codepoint filename
@@ -87,35 +91,100 @@ impl Emoji {
     }
 }
 
-fn render_svg(svg_data: &str, width: u32, height: u32) -> Option<Pixmap> {
+fn render_svg_scaled(svg_data: &str, width: i32, height: i32) -> anyhow::Result<Pixmap> {
     let opt = resvg::usvg::Options::default();
-    let tree = resvg::usvg::Tree::from_str(svg_data, &opt).ok()?;
-
-    let mut pixmap = Pixmap::new(width, height)?;
+    let tree = resvg::usvg::Tree::from_str(svg_data, &opt).context("failed to parse SVG")?;
     let size = tree.size();
-    let scale_x = width as f32 / size.width();
-    let scale_y = height as f32 / size.height();
+
+    let intrinsic_w = size.width().round().max(1.0) as i32;
+    let intrinsic_h = size.height().round().max(1.0) as i32;
+    let (target_w, target_h) = resolve_target_dimensions(intrinsic_w, intrinsic_h, width, height)?;
+
+    let mut pixmap = Pixmap::new(target_w as u32, target_h as u32)
+        .context("failed to allocate emoji SVG pixmap")?;
+    let scale_x = target_w as f32 / size.width();
+    let scale_y = target_h as f32 / size.height();
     let transform = tiny_skia::Transform::from_scale(scale_x, scale_y);
 
     resvg::render(&tree, transform, &mut pixmap.as_mut());
-    Some(pixmap)
+    Ok(pixmap)
 }
 
-fn create_solid_pixmap(width: u32, height: u32, r: u8, g: u8, b: u8, a: u8) -> Option<Pixmap> {
-    let mut pixmap = Pixmap::new(width, height)?;
-    let pa = a as f32 / 255.0;
-    let color = tiny_skia::PremultipliedColorU8::from_rgba(
-        (r as f32 * pa) as u8,
-        (g as f32 * pa) as u8,
-        (b as f32 * pa) as u8,
-        a,
-    )?;
-
-    let pixels = pixmap.pixels_mut();
-    for px in pixels.iter_mut() {
-        *px = color;
+fn resolve_target_dimensions(
+    source_w: i32,
+    source_h: i32,
+    width: i32,
+    height: i32,
+) -> anyhow::Result<(i32, i32)> {
+    if source_w <= 0 || source_h <= 0 {
+        anyhow::bail!("emoji source dimensions must be positive");
     }
-    Some(pixmap)
+
+    let (mut target_w, mut target_h) = (width, height);
+    if target_w == 0 && target_h == 0 {
+        target_w = source_w;
+        target_h = source_h;
+    } else if target_w == 0 {
+        target_w = ((target_h as f64) * (source_w as f64) / (source_h as f64)).round() as i32;
+    } else if target_h == 0 {
+        target_h = ((target_w as f64) * (source_h as f64) / (source_w as f64)).round() as i32;
+    }
+
+    Ok((target_w.max(1), target_h.max(1)))
+}
+
+fn scale_emoji_image(src: &RgbaImage, width: i32, height: i32) -> anyhow::Result<Pixmap> {
+    let (source_w, source_h) = (src.width() as i32, src.height() as i32);
+    let (target_w, target_h) = resolve_target_dimensions(source_w, source_h, width, height)?;
+
+    let scaled = if target_w == source_w && target_h == source_h {
+        src.clone()
+    } else if target_w % source_w == 0 && target_h % source_h == 0 {
+        image::imageops::resize(
+            src,
+            target_w as u32,
+            target_h as u32,
+            image::imageops::FilterType::Nearest,
+        )
+    } else {
+        let sx = target_w as f64 / source_w as f64;
+        let sy = target_h as f64 / source_h as f64;
+        let up_factor = sx.max(sy).ceil().max(2.0).min(10.0) as u32;
+        let upscaled = image::imageops::resize(
+            src,
+            src.width() * up_factor,
+            src.height() * up_factor,
+            image::imageops::FilterType::Nearest,
+        );
+        image::imageops::resize(
+            &upscaled,
+            target_w as u32,
+            target_h as u32,
+            image::imageops::FilterType::Lanczos3,
+        )
+    };
+
+    Ok(rgba_to_pixmap(&scaled))
+}
+
+fn rgba_to_pixmap(img: &RgbaImage) -> Pixmap {
+    let (w, h) = img.dimensions();
+    let mut pixmap = Pixmap::new(w, h).expect("emoji pixmap dimensions must be positive");
+    let src = img.as_raw();
+    let dst = pixmap.data_mut();
+    for i in 0..(w * h) as usize {
+        let off = i * 4;
+        let r = src[off];
+        let g = src[off + 1];
+        let b = src[off + 2];
+        let a = src[off + 3];
+        let pa = a as f32 / 255.0;
+        dst[off] = (r as f32 * pa) as u8;
+        dst[off + 1] = (g as f32 * pa) as u8;
+        dst[off + 2] = (b as f32 * pa) as u8;
+        dst[off + 3] = a;
+    }
+    pixmap
 }
 
 impl Widget for Emoji {
@@ -197,7 +266,7 @@ mod tests {
 
     #[test]
     fn from_svg_renders_non_zero_pixels() {
-        let widget = Emoji::from_svg(CIRCLE_SVG, 16, 16);
+        let widget = Emoji::from_svg(CIRCLE_SVG, 16, 16).unwrap();
         let pm = widget.pixmap.as_ref().expect("pixmap should exist");
         let non_zero = pm.pixels().iter().any(|p| p.alpha() > 0);
         assert!(non_zero, "rendered SVG should have non-transparent pixels");
@@ -205,7 +274,7 @@ mod tests {
 
     #[test]
     fn from_svg_correct_dimensions() {
-        let widget = Emoji::from_svg(CIRCLE_SVG, 12, 8);
+        let widget = Emoji::from_svg(CIRCLE_SVG, 12, 8).unwrap();
         assert_eq!(widget.size(), Some((12, 8)));
         let pm = widget.pixmap.as_ref().unwrap();
         assert_eq!(pm.width(), 12);
@@ -213,27 +282,43 @@ mod tests {
     }
 
     #[test]
-    fn invalid_svg_produces_placeholder() {
-        let widget = Emoji::from_svg("not valid svg at all", 10, 10);
-        let pm = widget.pixmap.as_ref().expect("placeholder should exist");
-        assert_eq!(pm.width(), 10);
-        assert_eq!(pm.height(), 10);
-        // placeholder is solid magenta, all pixels should be opaque
-        assert!(pm.pixels().iter().all(|p| p.alpha() == 255));
+    fn invalid_svg_errors() {
+        assert!(Emoji::from_svg("not valid svg at all", 10, 10).is_err());
     }
 
     #[test]
     fn frame_count_is_one() {
-        let widget = Emoji::from_svg(CIRCLE_SVG, 16, 16);
+        let widget = Emoji::from_svg(CIRCLE_SVG, 16, 16).unwrap();
         assert_eq!(widget.frame_count(Rect::new(0, 0, 64, 32)), 1);
     }
 
     #[test]
-    fn new_creates_colored_placeholder() {
-        let widget = Emoji::new("😀", 8, 8);
-        assert_eq!(widget.size(), Some((8, 8)));
-        let pm = widget.pixmap.as_ref().expect("placeholder should exist");
-        assert!(pm.pixels().iter().all(|p| p.alpha() == 255));
+    fn new_uses_atlas_default_size() {
+        let widget = Emoji::new("😀", 0, 0).unwrap();
+        let (w, h) = widget.size().unwrap();
+        assert!(w > 0 && h > 0);
+    }
+
+    #[test]
+    fn new_scales_height_with_aspect_ratio() {
+        let widget = Emoji::new("😀", 0, 16).unwrap();
+        let (w, h) = widget.size().unwrap();
+        assert_eq!(h, 16);
+        assert!(w > 0);
+    }
+
+    #[test]
+    fn new_errors_on_empty_or_negative_height() {
+        assert!(Emoji::new("", 0, 16).is_err());
+        assert!(Emoji::new("😀", 0, -1).is_err());
+    }
+
+    #[test]
+    fn new_uses_fallback_for_unknown_sequence() {
+        let widget = Emoji::new("not-a-real-emoji", 0, 16).unwrap();
+        let (w, h) = widget.size().unwrap();
+        assert_eq!(h, 16);
+        assert!(w > 0);
     }
 
     #[test]
@@ -258,7 +343,7 @@ mod tests {
 
     #[test]
     fn paint_blits_to_pixmap() {
-        let widget = Emoji::from_svg(CIRCLE_SVG, 8, 8);
+        let widget = Emoji::from_svg(CIRCLE_SVG, 8, 8).unwrap();
         let mut pixmap = Pixmap::new(16, 16).unwrap();
         widget.paint(&mut pixmap, Rect::new(4, 4, 8, 8), 0);
 

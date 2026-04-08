@@ -1,9 +1,8 @@
 use std::borrow::Cow;
 
+use super::emoji_atlas;
 use unicode_bidi::BidiInfo;
 use unicode_segmentation::UnicodeSegmentation;
-
-pub const INLINE_EMOJI_SIZE: i32 = 10;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TextSegment {
@@ -38,7 +37,7 @@ pub fn segment_string(text: &str) -> (Vec<TextSegment>, bool) {
     let mut text_run = String::new();
 
     for cluster in text.graphemes(true) {
-        if looks_like_emoji_cluster(cluster) {
+        if emoji_atlas::contains_exact(cluster) {
             if !text_run.is_empty() {
                 segments.push(TextSegment::Text(std::mem::take(&mut text_run)));
             }
@@ -54,37 +53,6 @@ pub fn segment_string(text: &str) -> (Vec<TextSegment>, bool) {
     }
 
     (segments, has_emoji)
-}
-
-fn looks_like_emoji_cluster(cluster: &str) -> bool {
-    let mut chars = cluster.chars();
-    let Some(first) = chars.next() else {
-        return false;
-    };
-
-    if cluster.contains('\u{200D}')
-        || cluster.contains('\u{FE0F}')
-        || cluster.contains('\u{20E3}')
-        || is_regional_indicator(first)
-    {
-        return true;
-    }
-
-    if chars.clone().any(is_regional_indicator) {
-        return true;
-    }
-
-    let code = first as u32;
-    matches!(
-        code,
-        0x2600..=0x26FF
-            | 0x2700..=0x27BF
-            | 0x1F000..=0x1FAFF
-    )
-}
-
-fn is_regional_indicator(ch: char) -> bool {
-    matches!(ch as u32, 0x1F1E6..=0x1F1FF)
 }
 
 #[cfg(test)]

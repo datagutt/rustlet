@@ -962,6 +962,32 @@ mod tests {
     }
 
     #[test]
+    fn emoji_widget_matches_pixlet_shape() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"render.star\", \"render\")\n",
+            "\n",
+            "def main(config):\n",
+            "    e = render.Emoji(emoji = \"😀\", height = 16)\n",
+            "    if e.width != 0 or e.height != 16:\n",
+            "        fail(\"emoji attrs broken\")\n",
+            "    ew, eh = e.size()\n",
+            "    if eh != 16 or ew <= 0:\n",
+            "        fail(\"emoji size broken\")\n",
+            "    if e.frame_count() != 1:\n",
+            "        fail(\"emoji frame_count broken\")\n",
+            "    d = render.Emoji(emoji = \"😀\")\n",
+            "    dw, dh = d.size()\n",
+            "    if d.width != 0 or d.height != 0 or dw <= 0 or dh <= 0:\n",
+            "        fail(\"emoji default sizing broken\")\n",
+            "    return render.Root(child = render.Row(children = [e, d]))\n",
+        );
+        let config = HashMap::new();
+        let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
     fn file_readall_and_image_asset_loading() {
         let applet = Applet::new();
         let dir = tempfile::tempdir().unwrap();

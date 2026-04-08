@@ -1,5 +1,6 @@
 use super::emoji::Emoji;
-use super::text_layout::{segment_string, visual_bidi_string, TextSegment, INLINE_EMOJI_SIZE};
+use super::emoji_atlas;
+use super::text_layout::{segment_string, visual_bidi_string, TextSegment};
 use super::{Rect, Widget};
 use crate::fonts::{self, MAX_TEXT_WIDTH};
 use tiny_skia::{Color, Pixmap, PremultipliedColorU8};
@@ -69,7 +70,11 @@ impl Text {
         for segment in &segments {
             text_w += match segment {
                 TextSegment::Text(text) => font.measure_width(text),
-                TextSegment::Emoji(_) => INLINE_EMOJI_SIZE,
+                TextSegment::Emoji(emoji) => {
+                    emoji_atlas::exact_size(emoji)
+                        .expect("segmented emoji must exist in atlas")
+                        .0
+                }
             };
             if text_w >= MAX_TEXT_WIDTH {
                 text_w = MAX_TEXT_WIDTH;
@@ -80,7 +85,7 @@ impl Text {
         let text_h = if self.height > 0 {
             self.height
         } else if has_emoji {
-            font_h.max(INLINE_EMOJI_SIZE)
+            font_h.max(emoji_atlas::max_height())
         } else {
             font_h
         };
@@ -101,7 +106,6 @@ impl Text {
         let dst_h = pixmap.height() as usize;
 
         let text_top = (text_h - font_h).max(0);
-        let emoji_top = (text_h - INLINE_EMOJI_SIZE).max(0);
 
         let mut cursor_x: i32 = 0;
         for segment in segments {
@@ -120,13 +124,17 @@ impl Text {
                     );
                 }
                 TextSegment::Emoji(emoji) => {
-                    let widget = Emoji::new(&emoji, INLINE_EMOJI_SIZE, INLINE_EMOJI_SIZE);
+                    let (emoji_w, emoji_h) = emoji_atlas::exact_size(&emoji)
+                        .expect("segmented emoji must exist in atlas");
+                    let emoji_top = (text_h - emoji_h).max(0);
+                    let widget =
+                        Emoji::new(&emoji, emoji_w, emoji_h).expect("inline emoji render failed");
                     widget.paint(
                         &mut pixmap,
-                        Rect::new(cursor_x, emoji_top, INLINE_EMOJI_SIZE, INLINE_EMOJI_SIZE),
+                        Rect::new(cursor_x, emoji_top, emoji_w, emoji_h),
                         0,
                     );
-                    cursor_x += INLINE_EMOJI_SIZE;
+                    cursor_x += emoji_w;
                 }
             }
 
@@ -306,6 +314,7 @@ mod tests {
     #[test]
     fn text_with_emoji_uses_inline_emoji_height() {
         let t = Text::new("😀");
-        assert_eq!(t.size(), Some((INLINE_EMOJI_SIZE, INLINE_EMOJI_SIZE)));
+        let (w, _) = emoji_atlas::exact_size("😀").unwrap();
+        assert_eq!(t.size(), Some((w, emoji_atlas::max_height())));
     }
 }
