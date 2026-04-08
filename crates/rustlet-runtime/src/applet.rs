@@ -19,7 +19,7 @@ use crate::humanize_module::build_humanize_globals;
 use crate::json_module::build_json_globals;
 use crate::math_module::build_math_globals;
 use crate::random_module::{build_random_globals, seed_for_execution};
-use crate::render_module::build_render_globals;
+use crate::render_module::{build_render_globals, set_render_context};
 use crate::schema_module::build_schema_globals;
 use crate::starlark_canvas::StarlarkCanvas;
 use crate::starlark_config::StarlarkConfig;
@@ -66,6 +66,7 @@ impl Applet {
     ) -> Result<Vec<Root>> {
         seed_for_execution(id);
         set_request_context(id);
+        set_render_context(is_2x);
 
         let render_frozen = build_render_frozen_module(width, height, is_2x)?;
         let time_frozen = build_simple_frozen_module("time", build_time_globals())?;
@@ -913,6 +914,50 @@ mod tests {
         let roots = applet
             .run_with_options("test.star", src, &config, 128, 64, true, None)
             .unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn two_x_defaults_text_and_wrapped_text_fonts() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"render.star\", \"render\")\n",
+            "\n",
+            "def main(config):\n",
+            "    t1 = render.Text(\"plain\")\n",
+            "    if t1.font != \"terminus-16\":\n",
+            "        fail(\"2x Text default font broken: \" + t1.font)\n",
+            "    t2 = render.WrappedText(\"wrapped\")\n",
+            "    if t2.font != \"terminus-16\":\n",
+            "        fail(\"2x WrappedText default font broken: \" + t2.font)\n",
+            "    t3 = render.Text(\"explicit\", font = \"tb-8\")\n",
+            "    if t3.font != \"tb-8\":\n",
+            "        fail(\"explicit font override broken\")\n",
+            "    return render.Root(child = render.Column(children = [t1, t2, t3]))\n",
+        );
+        let config = HashMap::new();
+        let roots = applet
+            .run_with_options("test.star", src, &config, 128, 64, true, None)
+            .unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn wrapped_text_exposes_wordbreak_attr() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"render.star\", \"render\")\n",
+            "\n",
+            "def main(config):\n",
+            "    wt = render.WrappedText(content = \"abcdef\", width = 15, wordbreak = True)\n",
+            "    if not wt.wordbreak:\n",
+            "        fail(\"wordbreak attr missing\")\n",
+            "    if wt.size()[1] <= 8:\n",
+            "        fail(\"wordbreak did not affect wrapping\")\n",
+            "    return render.Root(child = wt)\n",
+        );
+        let config = HashMap::new();
+        let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
         assert_eq!(roots.len(), 1);
     }
 

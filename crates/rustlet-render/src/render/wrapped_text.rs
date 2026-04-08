@@ -270,6 +270,15 @@ impl Widget for WrappedText {
 mod tests {
     use super::*;
 
+    fn rendered_bounds(wt: &WrappedText, bounds: Rect) -> Rect {
+        wt.paint_bounds(bounds, 0)
+    }
+
+    fn first_opaque_x(pixmap: &Pixmap, y: u32) -> Option<u32> {
+        (0..pixmap.width())
+            .find(|&x| pixmap.pixels()[(y * pixmap.width() + x) as usize].alpha() > 0)
+    }
+
     #[test]
     fn wrap_align_from_str() {
         assert_eq!(WrapAlign::from_str("left"), WrapAlign::Left);
@@ -351,5 +360,56 @@ mod tests {
         assert_eq!(lines.len(), 2);
         assert_eq!(lines[0], "a");
         assert_eq!(lines[1], "b");
+    }
+
+    #[test]
+    fn width_and_height_override_parent_bounds() {
+        let wt = WrappedText::new("AB CD.").with_width(7).with_height(12);
+        assert_eq!(
+            rendered_bounds(&wt, Rect::new(0, 0, 40, 40)),
+            Rect::new(0, 0, 7, 12)
+        );
+    }
+
+    #[test]
+    fn width_override_applies_without_explicit_height() {
+        let wt = WrappedText::new("AB CD.").with_width(3);
+        assert_eq!(
+            rendered_bounds(&wt, Rect::new(0, 0, 9, 5)),
+            Rect::new(0, 0, 3, 5)
+        );
+    }
+
+    #[test]
+    fn alignment_shifts_first_line_horizontally() {
+        let content = "AB CD.";
+        let width = 21;
+
+        let mut left_pm = Pixmap::new(width as u32, 16).unwrap();
+        WrappedText::new(content).with_width(width).paint(
+            &mut left_pm,
+            Rect::new(0, 0, width, 16),
+            0,
+        );
+
+        let mut center_pm = Pixmap::new(width as u32, 16).unwrap();
+        WrappedText::new(content)
+            .with_width(width)
+            .with_align(WrapAlign::Center)
+            .paint(&mut center_pm, Rect::new(0, 0, width, 16), 0);
+
+        let mut right_pm = Pixmap::new(width as u32, 16).unwrap();
+        WrappedText::new(content)
+            .with_width(width)
+            .with_align(WrapAlign::Right)
+            .paint(&mut right_pm, Rect::new(0, 0, width, 16), 0);
+
+        let sample_row = 1;
+        let left_x = first_opaque_x(&left_pm, sample_row).unwrap();
+        let center_x = first_opaque_x(&center_pm, sample_row).unwrap();
+        let right_x = first_opaque_x(&right_pm, sample_row).unwrap();
+
+        assert!(left_x < center_x, "center align should shift right");
+        assert!(center_x < right_x, "right align should shift farther right");
     }
 }

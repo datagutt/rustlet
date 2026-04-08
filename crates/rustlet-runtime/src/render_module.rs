@@ -16,11 +16,33 @@ use crate::starlark_bytes::StarlarkBytes;
 use crate::starlark_color::StarlarkColor;
 use crate::starlark_widgets::{RootMeta, StarlarkWidget, WidgetAttr, WidgetAttrValue};
 
+thread_local! {
+    static RENDER_IS_2X: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 fn attr(name: &str, value: WidgetAttrValue) -> WidgetAttr {
     WidgetAttr {
         name: name.to_string(),
         value,
     }
+}
+
+pub(crate) fn set_render_context(is_2x: bool) {
+    RENDER_IS_2X.with(|cell| cell.set(is_2x));
+}
+
+fn default_font(font: &str) -> &str {
+    if !font.is_empty() {
+        return font;
+    }
+
+    RENDER_IS_2X.with(|cell| {
+        if cell.get() {
+            "terminus-16"
+        } else {
+            rustlet_render::fonts::DEFAULT_FONT
+        }
+    })
 }
 
 fn clone_widget_attr(value: Value) -> anyhow::Result<WidgetAttrValue> {
@@ -394,10 +416,7 @@ pub fn render_module(builder: &mut GlobalsBuilder) {
         #[starlark(default = NoneType)] color: Value<'v>,
         eval: &mut Evaluator<'v, '_, '_>,
     ) -> anyhow::Result<Value<'v>> {
-        let mut t = Text::new(content);
-        if !font.is_empty() {
-            t = t.with_font(font);
-        }
+        let mut t = Text::new(content).with_font(default_font(font));
         if height > 0 {
             t = t.with_height(height);
         }
@@ -846,10 +865,7 @@ pub fn render_module(builder: &mut GlobalsBuilder) {
         #[starlark(default = false)] wordbreak: bool,
         eval: &mut Evaluator<'v, '_, '_>,
     ) -> anyhow::Result<Value<'v>> {
-        let mut wt = WrappedText::new(content);
-        if !font.is_empty() {
-            wt = wt.with_font(font);
-        }
+        let mut wt = WrappedText::new(content).with_font(default_font(font));
         if width > 0 {
             wt = wt.with_width(width);
         }
