@@ -2,6 +2,7 @@ use super::text_layout::{base_direction_is_rtl, visual_bidi_string};
 use super::{Rect, Widget};
 use crate::fonts::{self, MAX_TEXT_WIDTH};
 use tiny_skia::{Color, Pixmap, PremultipliedColorU8};
+use unicode_segmentation::UnicodeSegmentation;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum WrapAlign {
@@ -94,13 +95,10 @@ impl WrappedText {
 
     fn wrap_lines(&self, max_width: i32) -> Vec<String> {
         let font = fonts::get_font(&self.font);
-        let char_w = font.char_width as i32;
 
-        if max_width <= 0 || char_w <= 0 {
+        if max_width <= 0 {
             return vec![self.content.clone()];
         }
-
-        let max_chars = (max_width / char_w).max(1) as usize;
 
         let mut lines = Vec::new();
 
@@ -116,15 +114,14 @@ impl WrappedText {
             let mut current_line = String::new();
 
             for word in &words {
-                if self.word_break && word.chars().count() > max_chars {
+                if self.word_break && font.measure_width(word) > max_width {
                     // Force-break long words
                     if !current_line.is_empty() {
                         lines.push(current_line);
                         current_line = String::new();
                     }
-                    let chars: Vec<char> = word.chars().collect();
-                    for chunk in chars.chunks(max_chars) {
-                        lines.push(chunk.iter().collect());
+                    for chunk in break_word_to_fit(word, max_width, font) {
+                        lines.push(chunk);
                     }
                     continue;
                 }
@@ -154,6 +151,27 @@ impl WrappedText {
 
         lines
     }
+}
+
+fn break_word_to_fit(word: &str, max_width: i32, font: &fonts::BitmapFont) -> Vec<String> {
+    let mut chunks = Vec::new();
+    let mut current = String::new();
+
+    for grapheme in word.graphemes(true) {
+        let candidate = format!("{current}{grapheme}");
+        if current.is_empty() || font.measure_width(&candidate) <= max_width {
+            current.push_str(grapheme);
+        } else {
+            chunks.push(std::mem::take(&mut current));
+            current.push_str(grapheme);
+        }
+    }
+
+    if !current.is_empty() {
+        chunks.push(current);
+    }
+
+    chunks
 }
 
 fn premultiply_color(c: Color) -> PremultipliedColorU8 {
@@ -327,6 +345,15 @@ mod tests {
         assert_eq!(lines.len(), 2);
         assert_eq!(lines[0], "abc");
         assert_eq!(lines[1], "def");
+    }
+
+    #[test]
+    fn wrap_word_break_uses_actual_glyph_width() {
+        let wt = WrappedText::new("iiii")
+            .with_width(16)
+            .with_word_break(true);
+        let lines = wt.wrap_lines(16);
+        assert_eq!(lines, vec!["iiii"]);
     }
 
     #[test]
