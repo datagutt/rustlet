@@ -2,6 +2,7 @@ use starlark::environment::GlobalsBuilder;
 use starlark::eval::Evaluator;
 use starlark::values::Value;
 
+use crate::starlark_duration::StarlarkDuration;
 use crate::starlark_time::{datetime_to_unix, parse_iso8601, StarlarkTime};
 
 #[starlark::starlark_module]
@@ -13,12 +14,17 @@ pub fn time_module(builder: &mut GlobalsBuilder) {
     fn parse_time<'v>(
         s: &str,
         #[starlark(default = "")] _format: &str,
-        #[starlark(default = "")] _timezone: &str,
+        #[starlark(default = "")] timezone: &str,
         eval: &mut Evaluator<'v, '_, '_>,
     ) -> anyhow::Result<Value<'v>> {
         // Try ISO 8601: 2006-01-02T15:04:05Z
         if let Some(ts) = parse_iso8601(s) {
-            return Ok(eval.heap().alloc(StarlarkTime::from_unix(ts, 0)));
+            let time = if timezone.is_empty() {
+                StarlarkTime::from_unix(ts, 0)
+            } else {
+                StarlarkTime::from_unix(ts, 0).with_location(timezone)?
+            };
+            return Ok(eval.heap().alloc(time));
         }
 
         // Try date-only: 2006-01-02
@@ -28,20 +34,25 @@ pub fn time_module(builder: &mut GlobalsBuilder) {
             let day: i64 = s[8..10].parse().unwrap_or(0);
             if (1..=12).contains(&month) && (1..=31).contains(&day) {
                 let ts = datetime_to_unix(year, month, day, 0, 0, 0);
-                return Ok(eval.heap().alloc(StarlarkTime::from_unix(ts, 0)));
+                let time = if timezone.is_empty() {
+                    StarlarkTime::from_unix(ts, 0)
+                } else {
+                    StarlarkTime::from_unix(ts, 0).with_location(timezone)?
+                };
+                return Ok(eval.heap().alloc(time));
             }
         }
 
         Err(anyhow::anyhow!("cannot parse time string: {s}"))
     }
 
-    fn from_timestamp<'v>(ts: i32, eval: &mut Evaluator<'v, '_, '_>) -> anyhow::Result<Value<'v>> {
-        Ok(eval.heap().alloc(StarlarkTime::from_unix(ts as i64, 0)))
+    fn from_timestamp<'v>(ts: i64, eval: &mut Evaluator<'v, '_, '_>) -> anyhow::Result<Value<'v>> {
+        Ok(eval.heap().alloc(StarlarkTime::from_unix(ts, 0)))
     }
 
-    fn parse_duration(d: &str) -> anyhow::Result<i32> {
+    fn parse_duration<'v>(d: &str, eval: &mut Evaluator<'v, '_, '_>) -> anyhow::Result<Value<'v>> {
         let nanos = parse_duration_str(d)?;
-        Ok((nanos / 1_000_000) as i32)
+        Ok(eval.heap().alloc(StarlarkDuration::from_nanos(nanos)))
     }
 
     fn tz() -> anyhow::Result<String> {
@@ -63,11 +74,19 @@ pub fn build_time_globals() -> starlark::environment::Globals {
         .build()
 }
 
-fn parse_duration_str(s: &str) -> anyhow::Result<i64> {
+pub(crate) fn parse_duration_str(s: &str) -> anyhow::Result<i64> {
     let s = s.trim();
     if s.is_empty() {
         return Err(anyhow::anyhow!("empty duration string"));
     }
+
+    let (sign, s) = if let Some(rest) = s.strip_prefix('-') {
+        (-1_i64, rest)
+    } else if let Some(rest) = s.strip_prefix('+') {
+        (1_i64, rest)
+    } else {
+        (1_i64, s)
+    };
 
     let mut total_ns: i64 = 0;
     let mut num_buf = String::new();
@@ -116,7 +135,7 @@ fn parse_duration_str(s: &str) -> anyhow::Result<i64> {
         total_ns += (val * 1_000_000_000.0) as i64;
     }
 
-    Ok(total_ns)
+    Ok(total_ns.saturating_mul(sign))
 }
 
 #[cfg(test)]

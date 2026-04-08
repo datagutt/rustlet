@@ -3,8 +3,12 @@ use std::fmt;
 use allocative::Allocative;
 use starlark::environment::{Methods, MethodsBuilder, MethodsStatic};
 use starlark::starlark_simple_value;
-use starlark::values::{Heap, NoSerialize, ProvidesStaticType, StarlarkValue, Value, ValueLike};
+use starlark::values::{
+    Heap, NoSerialize, ProvidesStaticType, StarlarkValue, Value, ValueError, ValueLike,
+};
 use starlark_derive::starlark_value;
+
+use crate::starlark_duration::StarlarkDuration;
 
 #[derive(Debug, Clone, ProvidesStaticType, NoSerialize, Allocative)]
 pub struct StarlarkTime {
@@ -19,9 +23,10 @@ starlark_simple_value!(StarlarkTime);
 
 impl StarlarkTime {
     pub fn from_unix(secs: i64, nanos: i64) -> Self {
+        let (unix_secs, unix_nanos) = normalize_timestamp(secs, nanos);
         Self {
-            unix_secs: secs,
-            unix_nanos: nanos,
+            unix_secs,
+            unix_nanos,
             utc_offset_secs: 0,
             tz_name: "UTC".to_string(),
         }
@@ -36,6 +41,28 @@ impl StarlarkTime {
 
     fn local_secs(&self) -> i64 {
         self.unix_secs + self.utc_offset_secs as i64
+    }
+
+    pub fn with_location(mut self, location: &str) -> anyhow::Result<Self> {
+        self.utc_offset_secs = tz_offset_at(location, self.unix_secs)?;
+        self.tz_name = location.to_string();
+        Ok(self)
+    }
+
+    pub fn add_duration(&self, duration: &StarlarkDuration) -> Self {
+        let nanos = self
+            .unix_nanos
+            .saturating_add(duration.total_nanos % 1_000_000_000);
+        let secs = self
+            .unix_secs
+            .saturating_add(duration.total_nanos / 1_000_000_000);
+        let (unix_secs, unix_nanos) = normalize_timestamp(secs, nanos);
+        Self {
+            unix_secs,
+            unix_nanos,
+            utc_offset_secs: self.utc_offset_secs,
+            tz_name: self.tz_name.clone(),
+        }
     }
 
     pub fn components(&self) -> (i64, i64, i64, i64, i64, i64) {
@@ -207,7 +234,7 @@ impl<'v> StarlarkValue<'v> for StarlarkTime {
             "minute" => Some(heap.alloc(min as i32)),
             "second" => Some(heap.alloc(sec as i32)),
             "nanosecond" => Some(heap.alloc(self.unix_nanos as i32)),
-            "unix" => Some(heap.alloc(self.unix_secs as i32)),
+            "unix" => Some(heap.alloc(self.unix_secs)),
             "unix_nano" => Some(heap.alloc(self.unix_secs * 1_000_000_000 + self.unix_nanos)),
             _ => None,
         }
@@ -233,6 +260,28 @@ impl<'v> StarlarkValue<'v> for StarlarkTime {
             None => Ok(false),
         }
     }
+
+    fn add(&self, rhs: Value<'v>, heap: &'v Heap) -> Option<starlark::Result<Value<'v>>> {
+        let duration = rhs.downcast_ref::<StarlarkDuration>()?;
+        Some(Ok(heap.alloc(self.add_duration(duration))))
+    }
+
+    fn sub(&self, other: Value<'v>, heap: &'v Heap) -> starlark::Result<Value<'v>> {
+        if let Some(duration) = other.downcast_ref::<StarlarkDuration>() {
+            return Ok(heap.alloc(self.add_duration(&StarlarkDuration::from_nanos(
+                duration.total_nanos.saturating_neg(),
+            ))));
+        }
+        if let Some(other_time) = other.downcast_ref::<StarlarkTime>() {
+            let lhs_total = (self.unix_secs as i128) * 1_000_000_000 + self.unix_nanos as i128;
+            let rhs_total =
+                (other_time.unix_secs as i128) * 1_000_000_000 + other_time.unix_nanos as i128;
+            let delta = lhs_total.saturating_sub(rhs_total);
+            let delta = delta.clamp(i64::MIN as i128, i64::MAX as i128) as i64;
+            return Ok(heap.alloc(StarlarkDuration::from_nanos(delta)));
+        }
+        ValueError::unsupported_with(self, "-", other)
+    }
 }
 
 #[starlark::starlark_module]
@@ -253,15 +302,22 @@ fn time_methods(builder: &mut MethodsBuilder) {
             .downcast_ref::<StarlarkTime>()
             .ok_or_else(|| anyhow::anyhow!("expected Time"))?;
 
-        let offset = tz_offset_at(location, t.unix_secs)?;
-        let new_t = StarlarkTime {
-            unix_secs: t.unix_secs,
-            unix_nanos: t.unix_nanos,
-            utc_offset_secs: offset,
-            tz_name: location.to_string(),
-        };
-        Ok(eval.heap().alloc(new_t))
+        Ok(eval.heap().alloc(t.clone().with_location(location)?))
     }
+}
+
+fn normalize_timestamp(mut secs: i64, mut nanos: i64) -> (i64, i64) {
+    if nanos >= 1_000_000_000 || nanos <= -1_000_000_000 {
+        secs = secs.saturating_add(nanos / 1_000_000_000);
+        nanos %= 1_000_000_000;
+    }
+
+    if nanos < 0 {
+        secs = secs.saturating_sub(1);
+        nanos += 1_000_000_000;
+    }
+
+    (secs, nanos)
 }
 
 // DST-aware timezone offset lookup using jiff's IANA timezone database.

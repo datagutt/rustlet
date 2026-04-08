@@ -96,13 +96,14 @@ Suggested commit:
 
 - `runtime: fix pixlet binary and module semantics`
 
-### Phase 2b: Time and HTTP semantics parity
+### Phase 2b: Core time and HTTP semantics
 
-Goal: close the remaining runtime-behavior gaps that are larger than the binary/module slice above.
+Goal: land the highest-impact Pixlet runtime behaviors for time arithmetic and HTTP request/response shape.
 
-- [ ] Align `time.star` with Pixlet duration and location semantics.
-- [ ] Align `http.star` request arguments, response shape, and caching/header semantics with Pixlet.
-- [ ] Add compatibility tests for HTTP response shape and time arithmetic/location behavior.
+- [x] Make `time.parse_duration()` return a Pixlet-style duration object instead of a raw integer.
+- [x] Support `Time +/- Duration`, `Time - Time`, and core `in_location()` / timestamp behavior used by Pixlet apps.
+- [x] Expand `http.star` with Pixlet-style `status_text`, `auth`, `form_body`, `form_encoding`, JSON body handling, and response `encoding` / header shape.
+- [x] Add compatibility tests for HTTP response shape/caching headers and time arithmetic/location behavior.
 
 Suggested commit:
 

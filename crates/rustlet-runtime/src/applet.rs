@@ -14,7 +14,7 @@ use rustlet_render::Root;
 
 use crate::base64_module::build_base64_globals;
 use crate::color_module::build_color_globals;
-use crate::http_module::build_http_globals;
+use crate::http_module::{build_http_globals, set_request_context};
 use crate::humanize_module::build_humanize_globals;
 use crate::json_module::build_json_globals;
 use crate::math_module::build_math_globals;
@@ -65,6 +65,7 @@ impl Applet {
         base_dir: Option<&Path>,
     ) -> Result<Vec<Root>> {
         seed_for_execution(id);
+        set_request_context(id);
 
         let render_frozen = build_render_frozen_module(width, height, is_2x)?;
         let time_frozen = build_simple_frozen_module("time", build_time_globals())?;
@@ -293,6 +294,86 @@ fn build_asset_frozen_module(file_path: &Path) -> Result<FrozenModule> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
+    use std::thread;
+
+    fn read_http_request(stream: &mut std::net::TcpStream) -> String {
+        let mut buf = Vec::new();
+        let mut chunk = [0u8; 1024];
+
+        loop {
+            let n = stream.read(&mut chunk).unwrap();
+            if n == 0 {
+                break;
+            }
+            buf.extend_from_slice(&chunk[..n]);
+
+            if let Some(header_end) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+                let header_len = header_end + 4;
+                let header_text = String::from_utf8_lossy(&buf[..header_len]);
+                let content_length = header_text
+                    .lines()
+                    .find_map(|line| {
+                        line.strip_prefix("Content-Length: ")
+                            .and_then(|value| value.trim().parse::<usize>().ok())
+                    })
+                    .unwrap_or(0);
+                if buf.len() >= header_len + content_length {
+                    break;
+                }
+            }
+        }
+
+        String::from_utf8_lossy(&buf).to_string()
+    }
+
+    fn spawn_http_server(
+        expected_requests: usize,
+    ) -> (String, Arc<Mutex<Vec<String>>>, thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let request_count = Arc::new(AtomicUsize::new(0));
+
+        let requests_clone = Arc::clone(&requests);
+        let count_clone = Arc::clone(&request_count);
+        let handle = thread::spawn(move || {
+            for stream in listener.incoming().take(expected_requests) {
+                let mut stream = stream.unwrap();
+                let request = read_http_request(&mut stream);
+                requests_clone.lock().unwrap().push(request.clone());
+
+                let path = request
+                    .lines()
+                    .next()
+                    .and_then(|line| line.split_whitespace().nth(1))
+                    .unwrap_or("/");
+
+                let response = if path.starts_with("/cached") {
+                    let count = count_clone.fetch_add(1, Ordering::SeqCst) + 1;
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Encoding: identity\r\nX-Foo: a\r\nX-Foo: b\r\nContent-Length: {}\r\n\r\n{{\"count\":{count}}}",
+                        format!("{{\"count\":{count}}}").len()
+                    )
+                } else if path.starts_with("/form") {
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 2\r\n\r\nok"
+                        .to_string()
+                } else if path.starts_with("/json") {
+                    "HTTP/1.1 201 Created\r\nContent-Type: application/json\r\nContent-Length: 15\r\n\r\n{\"posted\":true}"
+                        .to_string()
+                } else {
+                    "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n".to_string()
+                };
+
+                stream.write_all(response.as_bytes()).unwrap();
+            }
+        });
+
+        (format!("http://{}", addr), requests, handle)
+    }
 
     #[test]
     fn eval_simple_text() {
@@ -557,12 +638,39 @@ mod tests {
             "load(\"render.star\", \"render\")\n",
             "\n",
             "def main(config):\n",
-            "    ms = time.parse_duration(\"5s\")\n",
-            "    if ms != 5000:\n",
-            "        fail(\"expected 5000, got \" + str(ms))\n",
+            "    duration = time.parse_duration(\"5s\")\n",
+            "    if duration.seconds != 5:\n",
+            "        fail(\"expected 5 seconds, got \" + str(duration.seconds))\n",
             "    return render.Root(\n",
-            "        child = render.Text(str(ms)),\n",
+            "        child = render.Text(str(duration.seconds)),\n",
             "    )\n",
+        );
+        let config = HashMap::new();
+        let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn time_duration_arithmetic() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"time.star\", \"time\")\n",
+            "load(\"render.star\", \"render\")\n",
+            "\n",
+            "def main(config):\n",
+            "    epoch = time.from_timestamp(0)\n",
+            "    later = epoch + time.parse_duration(\"90m\")\n",
+            "    if str(later) != \"1970-01-01T01:30:00Z\":\n",
+            "        fail(\"time + duration broken: \" + str(later))\n",
+            "    delta = later - epoch\n",
+            "    if delta.seconds != 5400 or delta.minutes != 90:\n",
+            "        fail(\"time difference broken\")\n",
+            "    if str(later - time.parse_duration(\"30m\")) != \"1970-01-01T01:00:00Z\":\n",
+            "        fail(\"time - duration broken\")\n",
+            "    shifted = epoch.in_location(\"+02:00\")\n",
+            "    if str(shifted) != \"1970-01-01T02:00:00+02:00\":\n",
+            "        fail(\"in_location broken: \" + str(shifted))\n",
+            "    return render.Root(child = render.Text(str(delta.seconds)))\n",
         );
         let config = HashMap::new();
         let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
@@ -865,5 +973,63 @@ mod tests {
         let config = HashMap::new();
         let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
         assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn http_surface_matches_pixlet_shape() {
+        let (base_url, requests, handle) = spawn_http_server(3);
+        let applet = Applet::new();
+        let src = format!(
+            concat!(
+                "load(\"http.star\", \"http\")\n",
+                "load(\"render.star\", \"render\")\n",
+                "\n",
+                "BASE = \"{}\"\n",
+                "\n",
+                "def main(config):\n",
+                "    rep1 = http.get(BASE + \"/cached\", params = {{\"foo\": \"bar baz\"}}, headers = {{\"X-Test\": \"alpha\"}}, ttl_seconds = 60)\n",
+                "    if rep1.status != \"200 OK\" or rep1.status_code != 200:\n",
+                "        fail(\"status fields broken\")\n",
+                "    if rep1.headers[\"X-Foo\"] != \"a,b\":\n",
+                "        fail(\"headers shape broken: \" + rep1.headers[\"X-Foo\"])\n",
+                "    if rep1.encoding != \"identity\":\n",
+                "        fail(\"encoding broken: \" + rep1.encoding)\n",
+                "    if rep1.json()[\"count\"] != 1:\n",
+                "        fail(\"json parsing broken\")\n",
+                "    rep2 = http.get(BASE + \"/cached\", params = {{\"foo\": \"bar baz\"}}, headers = {{\"X-Test\": \"alpha\"}}, ttl_seconds = 60)\n",
+                "    if rep2.body() != rep1.body():\n",
+                "        fail(\"cache/body broken\")\n",
+                "    rep3 = http.post(BASE + \"/form\", form_body = {{\"foo\": \"bar baz\"}}, auth = (\"u\", \"p\"))\n",
+                "    if rep3.body() != \"ok\":\n",
+                "        fail(\"form post broken\")\n",
+                "    rep4 = http.post(BASE + \"/json\", json_body = {{\"hello\": \"world\"}})\n",
+                "    if rep4.status_code != 201 or not rep4.json()[\"posted\"]:\n",
+                "        fail(\"json post broken\")\n",
+                "    if http.status_text(404) != \"Not Found\":\n",
+                "        fail(\"status_text broken\")\n",
+                "    return render.Root(child = render.Text(\"ok\"))\n",
+            ),
+            base_url,
+        );
+
+        let config = HashMap::new();
+        let roots = applet.run("test.star", &src, &config, 64, 32).unwrap();
+        assert_eq!(roots.len(), 1);
+
+        handle.join().unwrap();
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 3);
+        assert!(requests[0].starts_with("GET /cached?foo=bar+baz HTTP/1.1"));
+        let req0 = requests[0].to_ascii_lowercase();
+        assert!(req0.contains("x-test: alpha"));
+        assert!(req0.contains("x-tidbyt-app: test.star"));
+        assert!(req0.contains("x-tidbyt-cache-seconds: 60"));
+        assert!(requests[1].starts_with("POST /form HTTP/1.1"));
+        let req1 = requests[1].to_ascii_lowercase();
+        assert!(req1.contains("authorization: basic dtpw"));
+        assert!(req1.contains("content-type: application/x-www-form-urlencoded"));
+        assert!(requests[2].starts_with("POST /json HTTP/1.1"));
+        let req2 = requests[2].to_ascii_lowercase();
+        assert!(req2.contains("content-type: application/json"));
     }
 }

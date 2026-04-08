@@ -28,7 +28,7 @@ fn value_to_json(value: Value) -> anyhow::Result<String> {
     serde_json::to_string(&json).map_err(|e| anyhow::anyhow!("JSON encode error: {e}"))
 }
 
-fn starlark_to_serde(value: Value) -> anyhow::Result<serde_json::Value> {
+pub(crate) fn starlark_to_serde(value: Value) -> anyhow::Result<serde_json::Value> {
     if value.is_none() {
         return Ok(serde_json::Value::Null);
     }

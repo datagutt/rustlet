@@ -14,6 +14,8 @@ pub struct StarlarkResponse {
     pub status_code: u16,
     pub status: String,
     #[allocative(skip)]
+    pub encoding: String,
+    #[allocative(skip)]
     pub body: String,
     #[allocative(skip)]
     pub headers: Vec<(String, String)>,
@@ -59,7 +61,7 @@ impl<'v> StarlarkValue<'v> for StarlarkResponse {
             "headers" => Some(heap.alloc(AllocDict(
                 self.headers.iter().map(|(k, v)| (k.as_str(), v.as_str())),
             ))),
-            "encoding" => Some(heap.alloc("")),
+            "encoding" => Some(heap.alloc(self.encoding.as_str())),
             _ => None,
         }
     }

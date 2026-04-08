@@ -12,6 +12,7 @@ mod starlark_bytes;
 mod starlark_canvas;
 mod starlark_color;
 mod starlark_config;
+mod starlark_duration;
 mod starlark_file;
 mod starlark_response;
 pub mod starlark_time;
