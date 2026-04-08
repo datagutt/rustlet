@@ -1,0 +1,37 @@
+crates/rustlet-runtime/src/time_module.rs
+  701392bc65658c31 5,17,22-27,37-42,49-50,53,55,77,83-89,138
+crates/rustlet-runtime/src/starlark_time.rs
+  701392bc65658c31 7,11-12,26,28-29,46-65,263-273,275-283,305-312,314-320
+crates/rustlet-runtime/src/starlark_duration.rs
+  701392bc65658c31 1-115
+crates/rustlet-runtime/src/starlark_response.rs
+  701392bc65658c31 17-18,64
+crates/rustlet-runtime/src/json_module.rs
+  701392bc65658c31 31
+crates/rustlet-runtime/src/http_module.rs
+  701392bc65658c31 1,7,12,15,18-31,37,66,89,119-190,201,213-215,227-229,232-237,239-242,244-251,253,260-267,269,277-278,280,286,289-290,298,300,302-306,310-314,316-326,334,346,362-363,369-384,427,441-442,444,454-456,468-469,471,481-483,503,517-518,520,530-554,560-562
+crates/rustlet-runtime/src/applet.rs
+  701392bc65658c31 17,68,297-376,641-643,645,653-673,977-1016,1018-1022,1027,1031
+crates/rustlet-runtime/src/lib.rs
+  701392bc65658c31 15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "ee97596795f614840dc4d6b4b03ce496585fc4b1",
+  "prompts": {
+    "701392bc65658c31": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d6dee-6797-7f82-8a68-f5f431c9836b",
+        "model": "gpt-5.4"
+      },
+      "human_author": "datagutt",
+      "messages": [],
+      "total_additions": 623,
+      "total_deletions": 67,
+      "accepted_lines": 608,
+      "overriden_lines": 9
+    }
+  }
+}
