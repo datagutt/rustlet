@@ -45,7 +45,7 @@ Scope for this audit:
 - [x] `WrappedText` runtime constructor does not expose Pixlet's `wordbreak` parameter.
 - [ ] Text rendering is not Pixlet-compatible for bidi/emoji segmentation and likely differs in measured size and layout.
 - [ ] Wrapped text uses a simple char-width heuristic instead of Pixlet's actual text measurement flow, which can change line breaks.
-- [ ] Animated GIF image handling should be verified against Pixlet disposal/delay behavior.
+- [x] Animated GIF image handling should be verified against Pixlet disposal/delay behavior.
 - [ ] Rendering parity is not being checked against reference Pixlet tests/snapshots yet.
 
 ### CLI / tooling gaps
@@ -116,7 +116,7 @@ Goal: reduce output differences for real-world Pixlet applets.
 - [x] Match Pixlet 2x default font behavior.
 - [x] Add `WrappedText.wordbreak`.
 - [ ] Review text layout, bidi shaping, emoji handling, and measurement against reference Pixlet behavior.
-- [ ] Verify GIF composition/disposal and animation timing against Pixlet.
+- [x] Verify GIF composition/disposal and animation timing against Pixlet.
 - [ ] Port or recreate representative reference render tests for widgets and layouts.
 
 Suggested commit:

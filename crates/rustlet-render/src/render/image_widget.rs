@@ -55,7 +55,8 @@ impl ImageWidget {
     }
 
     fn frame_pixmap(&self, frame_idx: i32) -> &Pixmap {
-        let i = mod_int(frame_idx / self.hold_frames, self.frames.len() as i32);
+        let hold_frames = self.hold_frames.max(1);
+        let i = mod_int(frame_idx / hold_frames, self.frames.len() as i32);
         &self.frames[i as usize]
     }
 }
@@ -250,7 +251,8 @@ impl Widget for ImageWidget {
     }
 
     fn frame_count(&self, _bounds: Rect) -> i32 {
-        (self.frames.len() as i32 * self.hold_frames).max(1)
+        let hold_frames = self.hold_frames.max(1);
+        (self.frames.len() as i32 * hold_frames).max(1)
     }
 
     fn size(&self) -> Option<(i32, i32)> {
@@ -264,6 +266,19 @@ impl Widget for ImageWidget {
 mod tests {
     use super::*;
 
+    const TEST_GIF: &[u8] = &[
+        0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x05, 0x00, 0x04, 0x00, 0xf0, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x21, 0xf9, 0x04, 0x01, 0x7b, 0x00, 0x00, 0x00, 0x21, 0xff, 0x0b,
+        0x4e, 0x45, 0x54, 0x53, 0x43, 0x41, 0x50, 0x45, 0x32, 0x2e, 0x30, 0x03, 0x01, 0x00, 0x00,
+        0x00, 0x2c, 0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0x04, 0x00, 0x00, 0x02, 0x06, 0x04, 0x62,
+        0x68, 0xb9, 0x8b, 0x05, 0x00, 0x21, 0xf9, 0x04, 0x01, 0x7b, 0x00, 0x00, 0x00, 0x2c, 0x00,
+        0x00, 0x00, 0x00, 0x05, 0x00, 0x04, 0x00, 0x00, 0x02, 0x05, 0x84, 0x73, 0xa6, 0xa8, 0x57,
+        0x00, 0x21, 0xf9, 0x04, 0x01, 0x7b, 0x00, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00, 0x05,
+        0x00, 0x04, 0x00, 0x00, 0x02, 0x06, 0x0c, 0x6e, 0x90, 0xa7, 0xcc, 0x05, 0x00, 0x21, 0xf9,
+        0x04, 0x01, 0x7b, 0x00, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0x04, 0x00,
+        0x00, 0x02, 0x06, 0x44, 0x80, 0x67, 0xc8, 0xca, 0x05, 0x00, 0x3b,
+    ];
+
     fn make_1x1_red_png() -> Vec<u8> {
         use image::{ImageBuffer, Rgba};
         let img: ImageBuffer<Rgba<u8>, Vec<u8>> =
@@ -272,6 +287,24 @@ mod tests {
         let mut cursor = std::io::Cursor::new(&mut buf);
         img.write_to(&mut cursor, image::ImageFormat::Png).unwrap();
         buf
+    }
+
+    fn frame_mask(widget: &ImageWidget, frame_idx: i32) -> Vec<String> {
+        let frame = widget.frame_pixmap(frame_idx);
+        (0..frame.height())
+            .map(|y| {
+                (0..frame.width())
+                    .map(|x| {
+                        let px = frame.pixels()[(y * frame.width() + x) as usize];
+                        if px.alpha() > 0 {
+                            'x'
+                        } else {
+                            '.'
+                        }
+                    })
+                    .collect()
+            })
+            .collect()
     }
 
     #[test]
@@ -323,5 +356,58 @@ mod tests {
         let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="2" height="1" viewBox="0 0 2 1"><rect width="2" height="1" fill="#00ff00"/></svg>"##;
         let widget = ImageWidget::from_bytes(svg, None, None).unwrap();
         assert_eq!(widget.size(), Some((2, 1)));
+    }
+
+    #[test]
+    fn decode_animated_gif_matches_pixlet_frames() {
+        let widget = ImageWidget::from_bytes(TEST_GIF, None, None).unwrap();
+
+        assert_eq!(widget.size(), Some((5, 4)));
+        assert_eq!(widget.delay_ms, 1230);
+        assert_eq!(widget.frame_count(Rect::new(0, 0, 64, 32)), 4);
+
+        assert_eq!(
+            frame_mask(&widget, 0),
+            vec!["..x..", "x....", ".x...", "...x."]
+        );
+        assert_eq!(
+            frame_mask(&widget, 1),
+            vec!["..xx.", "xx...", ".xx..", "...xx"]
+        );
+        assert_eq!(
+            frame_mask(&widget, 2),
+            vec!["x.xxx", "xxx..", ".xxx.", "...xx"]
+        );
+        assert_eq!(
+            frame_mask(&widget, 3),
+            vec!["xxxxx", "xxxx.", ".xxxx", "...xx"]
+        );
+        assert_eq!(frame_mask(&widget, 4), frame_mask(&widget, 0));
+    }
+
+    #[test]
+    fn hold_frames_repeats_gif_frames() {
+        let mut widget = ImageWidget::from_bytes(TEST_GIF, None, None).unwrap();
+        widget.hold_frames = 2;
+
+        assert_eq!(widget.frame_count(Rect::new(0, 0, 64, 32)), 8);
+        assert_eq!(frame_mask(&widget, 0), frame_mask(&widget, 1));
+        assert_ne!(frame_mask(&widget, 1), frame_mask(&widget, 2));
+        assert_eq!(frame_mask(&widget, 2), frame_mask(&widget, 3));
+        assert_eq!(frame_mask(&widget, 4), frame_mask(&widget, 5));
+        assert_eq!(frame_mask(&widget, 6), frame_mask(&widget, 7));
+    }
+
+    #[test]
+    fn hold_frames_zero_falls_back_to_one() {
+        let data = make_1x1_red_png();
+        let mut widget = ImageWidget::from_bytes(&data, None, None).unwrap();
+        widget.hold_frames = 0;
+
+        assert_eq!(widget.frame_count(Rect::new(0, 0, 64, 32)), 1);
+        assert_eq!(
+            widget.paint_bounds(Rect::new(0, 0, 64, 32), 3),
+            Rect::new(0, 0, 1, 1)
+        );
     }
 }
