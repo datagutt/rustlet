@@ -1720,6 +1720,8 @@ dependencies = [
  "insta",
  "resvg",
  "tiny-skia",
+ "unicode-bidi",
+ "unicode-segmentation",
 ]
 
 [[package]]

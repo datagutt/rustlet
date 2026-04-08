@@ -1,3 +1,4 @@
+use super::text_layout::{base_direction_is_rtl, visual_bidi_string};
 use super::{Rect, Widget};
 use crate::fonts::{self, MAX_TEXT_WIDTH};
 use tiny_skia::{Color, Pixmap, PremultipliedColorU8};
@@ -29,6 +30,7 @@ pub struct WrappedText {
     pub color: Color,
     pub align: WrapAlign,
     pub word_break: bool,
+    auto_align: bool,
 }
 
 impl WrappedText {
@@ -42,6 +44,7 @@ impl WrappedText {
             color: Color::from_rgba8(255, 255, 255, 255),
             align: WrapAlign::Left,
             word_break: false,
+            auto_align: true,
         }
     }
 
@@ -67,6 +70,7 @@ impl WrappedText {
 
     pub fn with_align(mut self, align: WrapAlign) -> Self {
         self.align = align;
+        self.auto_align = false;
         self
     }
 
@@ -78,6 +82,14 @@ impl WrappedText {
     pub fn with_word_break(mut self, word_break: bool) -> Self {
         self.word_break = word_break;
         self
+    }
+
+    fn effective_align(&self) -> WrapAlign {
+        if self.auto_align && base_direction_is_rtl(&self.content) {
+            WrapAlign::Right
+        } else {
+            self.align
+        }
     }
 
     fn wrap_lines(&self, max_width: i32) -> Vec<String> {
@@ -220,9 +232,10 @@ impl Widget for WrappedText {
 
         for line in &lines {
             // Compute line width for alignment
-            let line_width = font.measure_width(line);
+            let visual_line = visual_bidi_string(line);
+            let line_width = font.measure_width(visual_line.as_ref());
 
-            let x_offset = match self.align {
+            let x_offset = match self.effective_align() {
                 WrapAlign::Left => 0,
                 WrapAlign::Center => (wrap_width - line_width) / 2,
                 WrapAlign::Right => wrap_width - line_width,
@@ -230,7 +243,7 @@ impl Widget for WrappedText {
 
             let mut cursor_x = bounds.x + x_offset;
 
-            for ch in line.chars() {
+            for ch in visual_line.chars() {
                 if let Some(glyph) = font.glyph(ch) {
                     for row in 0..glyph.height as u8 {
                         for col in 0..glyph.width as u8 {
@@ -411,5 +424,33 @@ mod tests {
 
         assert!(left_x < center_x, "center align should shift right");
         assert!(center_x < right_x, "right align should shift farther right");
+    }
+
+    #[test]
+    fn rtl_content_defaults_to_right_alignment() {
+        let content = "שלום abc";
+        let width = 40;
+
+        let mut auto_pm = Pixmap::new(width as u32, 16).unwrap();
+        WrappedText::new(content).with_width(width).paint(
+            &mut auto_pm,
+            Rect::new(0, 0, width, 16),
+            0,
+        );
+
+        let mut left_pm = Pixmap::new(width as u32, 16).unwrap();
+        WrappedText::new(content)
+            .with_width(width)
+            .with_align(WrapAlign::Left)
+            .paint(&mut left_pm, Rect::new(0, 0, width, 16), 0);
+
+        let sample_row = 1;
+        let auto_x = first_opaque_x(&auto_pm, sample_row).unwrap();
+        let left_x = first_opaque_x(&left_pm, sample_row).unwrap();
+
+        assert!(
+            auto_x > left_x,
+            "rtl auto-align should shift visible text right"
+        );
     }
 }

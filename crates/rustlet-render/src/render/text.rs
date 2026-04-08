@@ -1,3 +1,5 @@
+use super::emoji::Emoji;
+use super::text_layout::{segment_string, visual_bidi_string, TextSegment, INLINE_EMOJI_SIZE};
 use super::{Rect, Widget};
 use crate::fonts::{self, MAX_TEXT_WIDTH};
 use tiny_skia::{Color, Pixmap, PremultipliedColorU8};
@@ -43,6 +45,7 @@ impl Text {
 
     pub fn with_height(mut self, height: i32) -> Self {
         self.height = height;
+        self.render_text();
         self
     }
 
@@ -60,8 +63,27 @@ impl Text {
         }
 
         let font = fonts::get_font(&self.font);
-        let text_w = font.measure_width(&self.content).min(MAX_TEXT_WIDTH);
-        let text_h = font.measure_height();
+        let visual = visual_bidi_string(&self.content);
+        let (segments, has_emoji) = segment_string(visual.as_ref());
+        let mut text_w = 0;
+        for segment in &segments {
+            text_w += match segment {
+                TextSegment::Text(text) => font.measure_width(text),
+                TextSegment::Emoji(_) => INLINE_EMOJI_SIZE,
+            };
+            if text_w >= MAX_TEXT_WIDTH {
+                text_w = MAX_TEXT_WIDTH;
+                break;
+            }
+        }
+        let font_h = font.measure_height();
+        let text_h = if self.height > 0 {
+            self.height
+        } else if has_emoji {
+            font_h.max(INLINE_EMOJI_SIZE)
+        } else {
+            font_h
+        };
 
         if text_w <= 0 || text_h <= 0 {
             self.rendered = None;
@@ -77,26 +99,35 @@ impl Text {
 
         let dst_w = pixmap.width() as usize;
         let dst_h = pixmap.height() as usize;
-        let pixels = pixmap.pixels_mut();
+
+        let text_top = (text_h - font_h).max(0);
+        let emoji_top = (text_h - INLINE_EMOJI_SIZE).max(0);
 
         let mut cursor_x: i32 = 0;
-        for ch in self.content.chars() {
-            if let Some(glyph) = font.glyph(ch) {
-                for row in 0..glyph.height as u8 {
-                    for col in 0..glyph.width as u8 {
-                        if glyph.pixel(col, row) {
-                            let px = cursor_x + glyph.x_offset as i32 + col as i32;
-                            let py = row as i32;
-                            if px >= 0 && (px as usize) < dst_w && py >= 0 && (py as usize) < dst_h
-                            {
-                                pixels[py as usize * dst_w + px as usize] = premul;
-                            }
-                        }
-                    }
+        for segment in segments {
+            match segment {
+                TextSegment::Text(text) => {
+                    let pixels = pixmap.pixels_mut();
+                    draw_text_segment(
+                        &text,
+                        font,
+                        text_top,
+                        &premul,
+                        &mut cursor_x,
+                        dst_w,
+                        dst_h,
+                        pixels,
+                    );
                 }
-                cursor_x += glyph.advance as i32;
-            } else {
-                cursor_x += font.char_width as i32;
+                TextSegment::Emoji(emoji) => {
+                    let widget = Emoji::new(&emoji, INLINE_EMOJI_SIZE, INLINE_EMOJI_SIZE);
+                    widget.paint(
+                        &mut pixmap,
+                        Rect::new(cursor_x, emoji_top, INLINE_EMOJI_SIZE, INLINE_EMOJI_SIZE),
+                        0,
+                    );
+                    cursor_x += INLINE_EMOJI_SIZE;
+                }
             }
 
             if cursor_x >= MAX_TEXT_WIDTH {
@@ -107,6 +138,40 @@ impl Text {
         self.rendered_width = text_w;
         self.rendered_height = text_h;
         self.rendered = Some(pixmap);
+    }
+}
+
+fn draw_text_segment(
+    text: &str,
+    font: &crate::fonts::BitmapFont,
+    top: i32,
+    premul: &PremultipliedColorU8,
+    cursor_x: &mut i32,
+    dst_w: usize,
+    dst_h: usize,
+    pixels: &mut [PremultipliedColorU8],
+) {
+    for ch in text.chars() {
+        if let Some(glyph) = font.glyph(ch) {
+            for row in 0..glyph.height as u8 {
+                for col in 0..glyph.width as u8 {
+                    if glyph.pixel(col, row) {
+                        let px = *cursor_x + glyph.x_offset as i32 + col as i32;
+                        let py = top + row as i32;
+                        if px >= 0 && (px as usize) < dst_w && py >= 0 && (py as usize) < dst_h {
+                            pixels[py as usize * dst_w + px as usize] = *premul;
+                        }
+                    }
+                }
+            }
+            *cursor_x += glyph.advance as i32;
+        } else {
+            *cursor_x += font.char_width as i32;
+        }
+
+        if *cursor_x >= MAX_TEXT_WIDTH {
+            break;
+        }
     }
 }
 
@@ -230,5 +295,17 @@ mod tests {
         // tb-8 BDF: T=4 + e=5 + s=4 + t=5 = 18
         assert_eq!(pb.width, 18);
         assert_eq!(pb.height, 8);
+    }
+
+    #[test]
+    fn text_explicit_height_changes_size() {
+        let t = Text::new("A").with_height(15);
+        assert_eq!(t.size(), Some((5, 15)));
+    }
+
+    #[test]
+    fn text_with_emoji_uses_inline_emoji_height() {
+        let t = Text::new("😀");
+        assert_eq!(t.size(), Some((INLINE_EMOJI_SIZE, INLINE_EMOJI_SIZE)));
     }
 }

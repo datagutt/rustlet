@@ -18,6 +18,7 @@ pub mod sequence;
 pub mod stack;
 pub mod starfield;
 pub mod text;
+mod text_layout;
 pub mod vector;
 pub mod wrapped_text;
 

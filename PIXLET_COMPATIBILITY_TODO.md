@@ -43,8 +43,8 @@ Scope for this audit:
 - [x] Default font selection does not match Pixlet at 2x:
   Pixlet defaults `render.Text` to `terminus-16` on 2x canvases.
 - [x] `WrappedText` runtime constructor does not expose Pixlet's `wordbreak` parameter.
-- [ ] Text rendering is not Pixlet-compatible for bidi/emoji segmentation and likely differs in measured size and layout.
-- [ ] Wrapped text uses a simple char-width heuristic instead of Pixlet's actual text measurement flow, which can change line breaks.
+- [ ] Text rendering still differs from Pixlet in shaping, emoji asset fidelity, and exact measurement/layout, even after adding bidi reordering and basic inline emoji segmentation.
+- [ ] Wrapped text still uses a simple char-width heuristic instead of Pixlet's actual text measurement flow, though bidi-aware default alignment and visual ordering are now in place.
 - [x] Animated GIF image handling should be verified against Pixlet disposal/delay behavior.
 - [ ] Rendering parity is not being checked against reference Pixlet tests/snapshots yet.
 
