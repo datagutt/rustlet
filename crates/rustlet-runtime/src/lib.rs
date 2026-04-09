@@ -1,5 +1,6 @@
 mod applet;
 mod base64_module;
+mod bsoup_module;
 mod color_module;
 mod http_module;
 mod humanize_module;
@@ -7,6 +8,7 @@ mod json_module;
 mod math_module;
 mod module_loader;
 mod random_module;
+mod re_module;
 mod render_module;
 mod schema_module;
 mod starlark_bytes;

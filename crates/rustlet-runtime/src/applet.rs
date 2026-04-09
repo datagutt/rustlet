@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::{anyhow, Result};
-use starlark::environment::{Globals, GlobalsBuilder, Module};
+use starlark::environment::{Globals, GlobalsBuilder, LibraryExtension, Module};
 use starlark::eval::Evaluator;
 use starlark::syntax::{AstModule, Dialect};
 
@@ -21,7 +21,7 @@ pub struct Applet {
 
 impl Applet {
     pub fn new() -> Self {
-        let globals = GlobalsBuilder::standard().build();
+        let globals = GlobalsBuilder::extended_by(&[LibraryExtension::StructType]).build();
         Self { globals }
     }
 
@@ -379,6 +379,46 @@ mod tests {
             "        child = render.Text(str(result)),\n",
             "    )\n",
         );
+        let config = HashMap::new();
+        let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn basic_pixlet_modules_load() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"render.star\", \"render\")\n",
+            "load(\"bsoup.star\", \"bsoup\")\n",
+            "load(\"encoding/base64.star\", \"base64\")\n",
+            "load(\"encoding/json.star\", \"json\")\n",
+            "load(\"http.star\", \"http\")\n",
+            "load(\"math.star\", \"math\")\n",
+            "load(\"re.star\", \"re\")\n",
+            "load(\"time.star\", \"time\")\n",
+            "\n",
+            "hello_b64 = \"aGVsbG8gdGhlcmU=\"\n",
+            "hello_json = '{\"hello\": \"there\"}'\n",
+            "hello_re = 'he[l]{2}o\\\\sthere'\n",
+            "\n",
+            "def main(config):\n",
+            "    if base64.decode(hello_b64) != \"hello there\":\n",
+            "        fail(\"base64 broken\")\n",
+            "    if json.decode(hello_json)[\"hello\"] != \"there\":\n",
+            "        fail(\"json broken\")\n",
+            "    if http.get == None:\n",
+            "        fail(\"http broken\")\n",
+            "    if math.ceil(3.14159265358979) != 4:\n",
+            "        fail(\"math broken\")\n",
+            "    if re.findall(hello_re, \"well hello there friend\") != (\"hello there\",):\n",
+            "        fail(\"re broken\")\n",
+            "    if time.parse_duration(\"10s\").seconds != 10:\n",
+            "        fail(\"time broken\")\n",
+            "    if bsoup.parseHtml(\"<h1>foo</h1>\").find(\"h1\").get_text() != \"foo\":\n",
+            "        fail(\"bsoup broken\")\n",
+            "    return render.Root(child = render.Box())\n",
+        );
+
         let config = HashMap::new();
         let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
         assert_eq!(roots.len(), 1);
@@ -889,20 +929,21 @@ mod tests {
                 "def _world():\n",
                 "    return \"hello world\"\n",
                 "\n",
-                "def world():\n",
-                "    return _world()\n",
+                "hello = struct(\n",
+                "    world = _world,\n",
+                ")\n",
             ),
         )
         .unwrap();
 
         let src = concat!(
             "load(\"render.star\", \"render\")\n",
-            "load(\"hello.star\", \"world\")\n",
+            "load(\"hello.star\", \"hello\")\n",
             "\n",
             "def main(config):\n",
-            "    if world() != \"hello world\":\n",
+            "    if hello.world() != \"hello world\":\n",
             "        fail(\"dependency module broken\")\n",
-            "    return render.Root(child = render.Text(world()))\n",
+            "    return render.Root(child = render.Text(hello.world()))\n",
         );
 
         let config = HashMap::new();
@@ -922,8 +963,9 @@ mod tests {
                 "def _world():\n",
                 "    return \"hello world\"\n",
                 "\n",
-                "def world():\n",
-                "    return _world()\n",
+                "hello = struct(\n",
+                "    world = _world,\n",
+                ")\n",
             ),
         )
         .unwrap();

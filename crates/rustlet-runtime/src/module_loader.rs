@@ -13,12 +13,14 @@ use starlark::values::structs::AllocStruct;
 use starlark::values::Value;
 
 use crate::base64_module::build_base64_globals;
+use crate::bsoup_module::build_bsoup_globals;
 use crate::color_module::build_color_globals;
 use crate::http_module::build_http_globals;
 use crate::humanize_module::build_humanize_globals;
 use crate::json_module::build_json_globals;
 use crate::math_module::build_math_globals;
 use crate::random_module::build_random_globals;
+use crate::re_module::build_re_globals;
 use crate::render_module::build_render_globals;
 use crate::schema_module::build_schema_globals;
 use crate::starlark_canvas::StarlarkCanvas;
@@ -50,8 +52,16 @@ impl BuiltinModuleRegistry {
         );
         modules.insert("math.star".to_string(), build_math_frozen_module()?);
         modules.insert(
+            "bsoup.star".to_string(),
+            build_simple_frozen_module("bsoup", build_bsoup_globals())?,
+        );
+        modules.insert(
             "random.star".to_string(),
             build_simple_frozen_module("random", build_random_globals())?,
+        );
+        modules.insert(
+            "re.star".to_string(),
+            build_simple_frozen_module("re", build_re_globals())?,
         );
         modules.insert(
             "color.star".to_string(),

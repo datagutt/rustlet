@@ -91,6 +91,7 @@ Goal: make the runtime behave like Pixlet for data flow and module contracts.
 - [x] Fix `random.star` behavior and API.
 - [x] Close high-impact gaps in `color.star`.
 - [x] Load local `.star` dependencies with Pixlet-style caching, relative resolution, private export checks, and cycle detection.
+- [x] Restore core utility module coverage needed by Pixlet applet loading paths: `struct`, `re.star`, and `bsoup.star`.
 - [x] Add compatibility tests for binary image loading, random determinism, color mutation, and SVG image loading.
 
 Suggested commit:

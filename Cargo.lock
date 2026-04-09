@@ -1736,6 +1736,8 @@ dependencies = [
  "getrandom 0.3.4",
  "iana-time-zone",
  "jiff",
+ "regex",
+ "roxmltree",
  "rustlet-render",
  "serde_json",
  "starlark",
