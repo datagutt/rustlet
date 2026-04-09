@@ -1,4 +1,5 @@
 mod applet;
+mod assert_module;
 mod base64_module;
 mod bsoup_module;
 mod cache_module;
@@ -22,7 +23,10 @@ mod starlark_file;
 mod starlark_response;
 pub mod starlark_time;
 mod starlark_widgets;
+mod strings_module;
 mod time_module;
+mod xpath_module;
+mod zipfile_module;
 
 pub use applet::Applet;
 pub use cache_module::{init_cache, InMemoryCache};

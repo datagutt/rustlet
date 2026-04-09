@@ -9,7 +9,7 @@ use starlark::syntax::{AstModule, Dialect};
 use rustlet_render::Root;
 
 use crate::http_module::set_request_context;
-use crate::module_loader::BuiltinModuleRegistry;
+use crate::module_loader::{preprocess_starlark_source, BuiltinModuleRegistry};
 use crate::random_module::seed_for_execution;
 use crate::render_module::set_render_context;
 use crate::starlark_config::StarlarkConfig;
@@ -56,8 +56,12 @@ impl Applet {
 
         let registry = BuiltinModuleRegistry::new(width, height, is_2x)?;
 
-        let ast =
-            AstModule::parse(id, src.to_owned(), &Dialect::Standard).map_err(|e| anyhow!("{e}"))?;
+        let ast = AstModule::parse(
+            id,
+            preprocess_starlark_source(src),
+            &Dialect::AllOptionsInternal,
+        )
+        .map_err(|e| anyhow!("{e}"))?;
 
         let module = Module::new();
         let loader = registry.loader(&self.globals, base_dir);
@@ -128,6 +132,7 @@ fn extract_single_root(sw: &StarlarkWidget) -> Result<Root> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use base64::Engine as _;
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -427,6 +432,170 @@ mod tests {
         let config = HashMap::new();
         let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
         assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn pixlet_assert_and_strings_modules_match_reference_shape() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"assert.star\", \"assert\")\n",
+            "load(\"render.star\", \"render\")\n",
+            "load(\"strings.star\", \"strings\")\n",
+            "\n",
+            "assert.eq(strings.pad(\"foo\", length = 5), \"foo  \")\n",
+            "assert.eq(strings.pad(\"foo\", length = 5, align = \"end\", char = \".\"), \"..foo\")\n",
+            "assert.eq(strings.pad(\"foo\", length = 8, char = \"ab\"), \"fooababa\")\n",
+            "assert.eq(strings.truncate(\"hello world\", length = 5), \"hell…\")\n",
+            "assert.eq(strings.truncate(\"hello world\", length = 5, ellipsis = \"...\"), \"he...\")\n",
+            "assert.lt(0, len(strings.pad(\"👋\", length = 3, align = \"end\", char = \".\")))\n",
+            "\n",
+            "def main(config):\n",
+            "    return render.Root(child = render.Text(\"ok\"))\n",
+        );
+
+        let roots = applet
+            .run("test.star", src, &HashMap::new(), 64, 32)
+            .unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn pixlet_xpath_module_matches_reference_shape() {
+        let applet = Applet::new();
+        let src = r#"
+load("assert.star", "assert")
+load("render.star", "render")
+load("xpath.star", "xpath")
+
+def main(config):
+    xml = """
+<foo>
+   <bar>1337</bar>
+   <bar>4711</bar>
+   <baz>
+      <qux>999</qux>
+      <qux>888</qux>
+   </baz>
+   <baz>
+      <qux>777</qux>
+   </baz>
+</foo>
+"""
+    d = xpath.loads(xml)
+    assert.eq(d.query("/foo/bar"), "1337")
+    assert.eq(d.query_all("/foo/bar"), ("1337", "4711"))
+    assert.eq(d.query("/foo/doesntexist"), None)
+    assert.eq(d.query_all("/foo/doesntexist"), ())
+
+    n = d.query_node("/foo/baz")
+    assert.eq(n.query("/qux"), "999")
+
+    nodes = d.query_all_nodes("/foo/baz")
+    assert.eq(len(nodes), 2)
+    assert.eq(nodes[0].query_all("/qux"), ("999", "888"))
+    assert.eq(nodes[1].query_all("/qux"), ("777",))
+    return render.Root(child = render.Text("ok"))
+"#;
+
+        let roots = applet
+            .run("test.star", src, &HashMap::new(), 64, 32)
+            .unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn pixlet_zipfile_module_matches_reference_shape() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"assert.star\", \"assert\")\n",
+            "load(\"compress/zipfile.star\", \"zipfile\")\n",
+            "load(\"encoding/base64.star\", \"base64\")\n",
+            "load(\"render.star\", \"render\")\n",
+            "\n",
+            "def main(config):\n",
+            "    z = zipfile.ZipFile(base64.decode(config.get(\"ZIP_BYTES\")))\n",
+            "    assert.eq(z.namelist(), (\"readme.txt\", \"gopher.txt\", \"todo.txt\"))\n",
+            "    assert.eq(z.open(\"readme.txt\").read(), \"This archive contains some text files.\")\n",
+            "    return render.Root(child = render.Text(\"ok\"))\n",
+        );
+
+        let mut config = HashMap::new();
+        config.insert(
+            "ZIP_BYTES".to_owned(),
+            base64::engine::general_purpose::STANDARD.encode(build_test_zip_archive()),
+        );
+
+        let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    fn build_test_zip_archive() -> Vec<u8> {
+        let files = [
+            ("readme.txt", "This archive contains some text files."),
+            ("gopher.txt", "Gopher names:\nGeorge\nGeoffrey\nGonzo"),
+            (
+                "todo.txt",
+                "Get animal handling licence.\nWrite more examples.",
+            ),
+        ];
+
+        let mut local_headers = Vec::new();
+        let mut central_directory = Vec::new();
+
+        for (name, body) in files {
+            let offset = local_headers.len() as u32;
+            let name_bytes = name.as_bytes();
+            let body_bytes = body.as_bytes();
+
+            local_headers.extend_from_slice(&0x0403_4b50u32.to_le_bytes());
+            local_headers.extend_from_slice(&20u16.to_le_bytes());
+            local_headers.extend_from_slice(&0u16.to_le_bytes());
+            local_headers.extend_from_slice(&0u16.to_le_bytes());
+            local_headers.extend_from_slice(&0u16.to_le_bytes());
+            local_headers.extend_from_slice(&0u16.to_le_bytes());
+            local_headers.extend_from_slice(&0u32.to_le_bytes());
+            local_headers.extend_from_slice(&(body_bytes.len() as u32).to_le_bytes());
+            local_headers.extend_from_slice(&(body_bytes.len() as u32).to_le_bytes());
+            local_headers.extend_from_slice(&(name_bytes.len() as u16).to_le_bytes());
+            local_headers.extend_from_slice(&0u16.to_le_bytes());
+            local_headers.extend_from_slice(name_bytes);
+            local_headers.extend_from_slice(body_bytes);
+
+            central_directory.extend_from_slice(&0x0201_4b50u32.to_le_bytes());
+            central_directory.extend_from_slice(&20u16.to_le_bytes());
+            central_directory.extend_from_slice(&20u16.to_le_bytes());
+            central_directory.extend_from_slice(&0u16.to_le_bytes());
+            central_directory.extend_from_slice(&0u16.to_le_bytes());
+            central_directory.extend_from_slice(&0u16.to_le_bytes());
+            central_directory.extend_from_slice(&0u16.to_le_bytes());
+            central_directory.extend_from_slice(&0u32.to_le_bytes());
+            central_directory.extend_from_slice(&(body_bytes.len() as u32).to_le_bytes());
+            central_directory.extend_from_slice(&(body_bytes.len() as u32).to_le_bytes());
+            central_directory.extend_from_slice(&(name_bytes.len() as u16).to_le_bytes());
+            central_directory.extend_from_slice(&0u16.to_le_bytes());
+            central_directory.extend_from_slice(&0u16.to_le_bytes());
+            central_directory.extend_from_slice(&0u16.to_le_bytes());
+            central_directory.extend_from_slice(&0u16.to_le_bytes());
+            central_directory.extend_from_slice(&0u32.to_le_bytes());
+            central_directory.extend_from_slice(&offset.to_le_bytes());
+            central_directory.extend_from_slice(name_bytes);
+        }
+
+        let central_directory_offset = local_headers.len() as u32;
+        let central_directory_size = central_directory.len() as u32;
+
+        let mut archive = local_headers;
+        archive.extend_from_slice(&central_directory);
+        archive.extend_from_slice(&0x0605_4b50u32.to_le_bytes());
+        archive.extend_from_slice(&0u16.to_le_bytes());
+        archive.extend_from_slice(&0u16.to_le_bytes());
+        archive.extend_from_slice(&(files.len() as u16).to_le_bytes());
+        archive.extend_from_slice(&(files.len() as u16).to_le_bytes());
+        archive.extend_from_slice(&central_directory_size.to_le_bytes());
+        archive.extend_from_slice(&central_directory_offset.to_le_bytes());
+        archive.extend_from_slice(&0u16.to_le_bytes());
+
+        archive
     }
 
     #[test]

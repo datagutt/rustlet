@@ -12,6 +12,7 @@ use starlark::values::dict::AllocDict;
 use starlark::values::structs::AllocStruct;
 use starlark::values::Value;
 
+use crate::assert_module::build_assert_globals;
 use crate::base64_module::build_base64_globals;
 use crate::bsoup_module::build_bsoup_globals;
 use crate::cache_module::build_cache_globals;
@@ -26,7 +27,10 @@ use crate::render_module::build_render_globals;
 use crate::schema_module::build_schema_globals;
 use crate::starlark_canvas::StarlarkCanvas;
 use crate::starlark_file::StarlarkFile;
+use crate::strings_module::build_strings_globals;
 use crate::time_module::build_time_globals;
+use crate::xpath_module::build_xpath_globals;
+use crate::zipfile_module::build_zipfile_globals;
 
 pub(crate) struct BuiltinModuleRegistry {
     modules: HashMap<String, FrozenModule>,
@@ -57,6 +61,13 @@ impl BuiltinModuleRegistry {
             build_simple_frozen_module("cache", build_cache_globals())?,
         );
         modules.insert(
+            "assert.star".to_string(),
+            build_multi_name_frozen_module(&[
+                ("assert", build_assert_globals()),
+                ("assert_compat", build_assert_globals()),
+            ])?,
+        );
+        modules.insert(
             "bsoup.star".to_string(),
             build_simple_frozen_module("bsoup", build_bsoup_globals())?,
         );
@@ -83,6 +94,18 @@ impl BuiltinModuleRegistry {
         modules.insert(
             "schema.star".to_string(),
             build_simple_frozen_module("schema", build_schema_globals())?,
+        );
+        modules.insert(
+            "strings.star".to_string(),
+            build_simple_frozen_module("strings", build_strings_globals())?,
+        );
+        modules.insert(
+            "xpath.star".to_string(),
+            build_simple_frozen_module("xpath", build_xpath_globals())?,
+        );
+        modules.insert(
+            "compress/zipfile.star".to_string(),
+            build_simple_frozen_module("zipfile", build_zipfile_globals())?,
         );
         Ok(Self { modules })
     }
@@ -177,9 +200,9 @@ impl AppletFileLoader<'_> {
     }
 
     fn load_star_module(&self, module_id: &str, abs_path: &Path) -> Result<FrozenModule> {
-        let src = std::fs::read_to_string(abs_path)?;
-        let ast =
-            AstModule::parse(module_id, src, &Dialect::Standard).map_err(|e| anyhow!("{e}"))?;
+        let src = preprocess_starlark_source(&std::fs::read_to_string(abs_path)?);
+        let ast = AstModule::parse(module_id, src, &Dialect::AllOptionsInternal)
+            .map_err(|e| anyhow!("{e}"))?;
         let module = Module::new();
         let child_dir = Path::new(module_id)
             .parent()
@@ -199,6 +222,108 @@ impl AppletFileLoader<'_> {
             .freeze()
             .map_err(|e| anyhow!("failed to freeze module {module_id}: {e:?}"))
     }
+}
+
+pub(crate) fn preprocess_starlark_source(src: &str) -> String {
+    let rewritten = rewrite_reserved_identifier(src, "assert", "assert_compat");
+    rewritten
+        .replace(
+            "load(\"assert.star\", \"assert\")",
+            "load(\"assert.star\", \"assert_compat\")",
+        )
+        .replace(
+            "load(\"assert.star\",\"assert\")",
+            "load(\"assert.star\",\"assert_compat\")",
+        )
+}
+
+fn rewrite_reserved_identifier(src: &str, from: &str, to: &str) -> String {
+    let chars = src.chars().collect::<Vec<_>>();
+    let mut out = String::with_capacity(src.len());
+    let mut i = 0;
+    let mut comment = false;
+    let mut string_delim = None;
+    let mut triple = false;
+
+    while i < chars.len() {
+        let c = chars[i];
+
+        if comment {
+            out.push(c);
+            if c == '\n' {
+                comment = false;
+            }
+            i += 1;
+            continue;
+        }
+
+        if let Some(delim) = string_delim {
+            out.push(c);
+            if c == '\\' && !triple && i + 1 < chars.len() {
+                out.push(chars[i + 1]);
+                i += 2;
+                continue;
+            }
+            if c == delim {
+                if triple {
+                    if i + 2 < chars.len() && chars[i + 1] == delim && chars[i + 2] == delim {
+                        out.push(chars[i + 1]);
+                        out.push(chars[i + 2]);
+                        i += 3;
+                        string_delim = None;
+                        triple = false;
+                        continue;
+                    }
+                } else {
+                    string_delim = None;
+                }
+            }
+            i += 1;
+            continue;
+        }
+
+        if c == '#' {
+            comment = true;
+            out.push(c);
+            i += 1;
+            continue;
+        }
+
+        if c == '"' || c == '\'' {
+            let is_triple = i + 2 < chars.len() && chars[i + 1] == c && chars[i + 2] == c;
+            string_delim = Some(c);
+            triple = is_triple;
+            out.push(c);
+            if is_triple {
+                out.push(chars[i + 1]);
+                out.push(chars[i + 2]);
+                i += 3;
+            } else {
+                i += 1;
+            }
+            continue;
+        }
+
+        if c == '_' || c.is_ascii_alphabetic() {
+            let start = i;
+            i += 1;
+            while i < chars.len() && (chars[i] == '_' || chars[i].is_ascii_alphanumeric()) {
+                i += 1;
+            }
+            let ident = chars[start..i].iter().collect::<String>();
+            if ident == from {
+                out.push_str(to);
+            } else {
+                out.push_str(&ident);
+            }
+            continue;
+        }
+
+        out.push(c);
+        i += 1;
+    }
+
+    out
 }
 
 struct LoadingGuard<'a> {
@@ -283,6 +408,24 @@ fn build_render_frozen_module(width: u32, height: u32, is_2x: bool) -> Result<Fr
     module
         .freeze()
         .map_err(|e| anyhow!("failed to freeze render module: {e:?}"))
+}
+
+fn build_multi_name_frozen_module(modules: &[(&str, Globals)]) -> Result<FrozenModule> {
+    let module = Module::new();
+    let heap = module.heap();
+
+    for (name, globals) in modules {
+        let dict = globals
+            .iter()
+            .map(|(member, value)| (member, value.to_value()))
+            .collect::<Vec<_>>();
+        let module_value = heap.alloc(AllocStruct(dict));
+        module.set(name, module_value);
+    }
+
+    module
+        .freeze()
+        .map_err(|e| anyhow!("failed to freeze multi-name module: {e:?}"))
 }
 
 fn build_simple_frozen_module(
