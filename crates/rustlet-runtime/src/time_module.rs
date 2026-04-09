@@ -13,10 +13,11 @@ pub fn time_module(builder: &mut GlobalsBuilder) {
 
     fn parse_time<'v>(
         s: &str,
-        #[starlark(default = "")] _format: &str,
+        #[starlark(default = "")] format: &str,
         #[starlark(default = "")] timezone: &str,
         eval: &mut Evaluator<'v, '_, '_>,
     ) -> anyhow::Result<Value<'v>> {
+        let _ = format;
         // Try ISO 8601: 2006-01-02T15:04:05Z
         if let Some(ts) = parse_iso8601(s) {
             let time = if timezone.is_empty() {

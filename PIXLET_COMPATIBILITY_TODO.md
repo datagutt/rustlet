@@ -94,7 +94,9 @@ Goal: make the runtime behave like Pixlet for data flow and module contracts.
 - [x] Restore core utility module coverage needed by Pixlet applet loading paths: `struct`, `re.star`, and `bsoup.star`.
 - [x] Add Pixlet-style `cache.star` semantics with execution-persistent, app-scoped entries and no-op behavior when cache is not configured.
 - [x] Restore additional utility/runtime modules used by Pixlet applets: `assert.star`, `strings.star`, `xpath.star`, and `compress/zipfile.star`.
+- [x] Restore cryptographic/runtime utility modules: `hash.star`, `hmac.star`, `qrcode.star`, and `sunrise.star`.
 - [x] Add a parser compatibility shim for Pixlet's `load("assert.star", "assert")` pattern on top of `starlark-rust`.
+- [x] Accept Pixlet's `time.parse_time(..., format=...)` call shape.
 - [x] Add compatibility tests for binary image loading, random determinism, color mutation, and SVG image loading.
 
 Suggested commit:

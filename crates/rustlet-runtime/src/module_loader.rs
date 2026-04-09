@@ -17,10 +17,13 @@ use crate::base64_module::build_base64_globals;
 use crate::bsoup_module::build_bsoup_globals;
 use crate::cache_module::build_cache_globals;
 use crate::color_module::build_color_globals;
+use crate::hash_module::build_hash_globals;
+use crate::hmac_module::build_hmac_globals;
 use crate::http_module::build_http_globals;
 use crate::humanize_module::build_humanize_globals;
 use crate::json_module::build_json_globals;
 use crate::math_module::build_math_globals;
+use crate::qrcode_module::build_qrcode_globals;
 use crate::random_module::build_random_globals;
 use crate::re_module::build_re_globals;
 use crate::render_module::build_render_globals;
@@ -28,6 +31,7 @@ use crate::schema_module::build_schema_globals;
 use crate::starlark_canvas::StarlarkCanvas;
 use crate::starlark_file::StarlarkFile;
 use crate::strings_module::build_strings_globals;
+use crate::sunrise_module::build_sunrise_globals;
 use crate::time_module::build_time_globals;
 use crate::xpath_module::build_xpath_globals;
 use crate::zipfile_module::build_zipfile_globals;
@@ -92,12 +96,28 @@ impl BuiltinModuleRegistry {
             build_simple_frozen_module("http", build_http_globals())?,
         );
         modules.insert(
+            "hash.star".to_string(),
+            build_simple_frozen_module("hash", build_hash_globals())?,
+        );
+        modules.insert(
+            "hmac.star".to_string(),
+            build_simple_frozen_module("hmac", build_hmac_globals())?,
+        );
+        modules.insert(
+            "qrcode.star".to_string(),
+            build_simple_frozen_module("qrcode", build_qrcode_globals())?,
+        );
+        modules.insert(
             "schema.star".to_string(),
             build_simple_frozen_module("schema", build_schema_globals())?,
         );
         modules.insert(
             "strings.star".to_string(),
             build_simple_frozen_module("strings", build_strings_globals())?,
+        );
+        modules.insert(
+            "sunrise.star".to_string(),
+            build_simple_frozen_module("sunrise", build_sunrise_globals())?,
         );
         modules.insert(
             "xpath.star".to_string(),

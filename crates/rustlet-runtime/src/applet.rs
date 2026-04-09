@@ -529,6 +529,95 @@ def main(config):
         assert_eq!(roots.len(), 1);
     }
 
+    #[test]
+    fn pixlet_hmac_and_hash_modules_match_reference_shape() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"assert.star\", \"assert\")\n",
+            "load(\"hash.star\", \"hash\")\n",
+            "load(\"hmac.star\", \"hmac\")\n",
+            "load(\"render.star\", \"render\")\n",
+            "\n",
+            "assert.eq(hmac.md5(\"secret\", \"helloworld\"), \"8bd4df4530c3c2cafabf6986740e44bd\")\n",
+            "assert.eq(hmac.sha1(\"secret\", \"helloworld\"), \"e92eb69939a8b8c9843a75296714af611c73fb53\")\n",
+            "assert.eq(hmac.sha256(\"secret\", \"helloworld\"), \"7a7c2bf41973489be3b318ad2f16c75fc875c340deecb12a3f79b28bb7135c97\")\n",
+            "assert.eq(hash.sha256(\"helloworld\"), \"936a185caaa266bb9cbe981e9e05cb78cd732b0b3280eb944412bb6f8f8f07af\")\n",
+            "\n",
+            "def main(config):\n",
+            "    return render.Root(child = render.Text(\"ok\"))\n",
+        );
+
+        let roots = applet
+            .run("test.star", src, &HashMap::new(), 64, 32)
+            .unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn pixlet_sunrise_module_matches_reference_shape() {
+        let applet = Applet::new();
+        let src = r#"
+load("assert.star", "assert")
+load("render.star", "render")
+load("sunrise.star", "sunrise")
+load("time.star", "time")
+
+def abs(x):
+    if x > 0:
+        return x
+    return -x
+
+format = "2006-01-02T15:04:05"
+input = time.parse_time("2022-01-15T22:40:24", format = format)
+expectedRise = time.parse_time("2022-01-15T12:17:29", format = format)
+expectedSet = time.parse_time("2022-01-15T21:52:30", format = format)
+lat = 40.6781784
+lng = -73.9441579
+sunriseElevation = -50.0 / 60.0
+
+def main(config):
+    rise = sunrise.sunrise(lat, lng, input)
+    set = sunrise.sunset(lat, lng, input)
+    elevation = sunrise.elevation(lat, lng, expectedSet)
+    morning, evening = sunrise.elevation_time(lat, lng, sunriseElevation, input)
+
+    assert.eq(rise, expectedRise)
+    assert.eq(set, expectedSet)
+    assert.lt(abs(elevation - sunriseElevation), 0.2)
+    assert.lt(abs(expectedRise.unix - morning.unix), 2)
+    assert.lt(abs(evening.unix - expectedSet.unix), 2)
+    return render.Root(child = render.Text("ok"))
+"#;
+
+        let roots = applet
+            .run("test.star", src, &HashMap::new(), 64, 32)
+            .unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn pixlet_qrcode_module_generates_renderable_bytes() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"assert.star\", \"assert\")\n",
+            "load(\"qrcode.star\", \"qrcode\")\n",
+            "load(\"render.star\", \"render\")\n",
+            "\n",
+            "url = \"https://tidbyt.com?utm_source=pixlet_example\"\n",
+            "code = qrcode.generate(url = url, size = \"large\", color = \"#fff\", background = \"#000\")\n",
+            "\n",
+            "def main(config):\n",
+            "    img = render.Image(src = code)\n",
+            "    assert.eq(img.size(), (29, 29))\n",
+            "    return render.Root(child = img)\n",
+        );
+
+        let roots = applet
+            .run("test.star", src, &HashMap::new(), 64, 32)
+            .unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
     fn build_test_zip_archive() -> Vec<u8> {
         let files = [
             ("readme.txt", "This archive contains some text files."),
