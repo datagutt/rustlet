@@ -1,7 +1,9 @@
 mod applet;
 mod base64_module;
 mod bsoup_module;
+mod cache_module;
 mod color_module;
+mod execution_context;
 mod http_module;
 mod humanize_module;
 mod json_module;
@@ -23,3 +25,4 @@ mod starlark_widgets;
 mod time_module;
 
 pub use applet::Applet;
+pub use cache_module::{init_cache, InMemoryCache};

@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::{LazyLock, Mutex};
@@ -12,22 +11,12 @@ use starlark::values::none::NoneType;
 use starlark::values::tuple::TupleRef;
 use starlark::values::Value;
 
+use crate::execution_context::{current_app_id, set_current_app_id};
 use crate::json_module::starlark_to_serde;
 use crate::starlark_response::StarlarkResponse;
 
-thread_local! {
-    static CURRENT_APP_ID: RefCell<String> = const { RefCell::new(String::new()) };
-}
-
 pub(crate) fn set_request_context(id: &str) {
-    CURRENT_APP_ID.with(|slot| {
-        let app_id = id.split('/').next().unwrap_or(id).to_string();
-        *slot.borrow_mut() = app_id;
-    });
-}
-
-fn current_app_id() -> String {
-    CURRENT_APP_ID.with(|slot| slot.borrow().clone())
+    set_current_app_id(id);
 }
 
 struct CachedResponse {

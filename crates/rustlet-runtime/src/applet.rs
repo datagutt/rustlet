@@ -131,8 +131,13 @@ mod tests {
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::LazyLock;
     use std::sync::{Arc, Mutex};
     use std::thread;
+
+    use crate::cache_module::{init_cache, InMemoryCache};
+
+    static CACHE_TEST_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
     fn read_http_request(stream: &mut std::net::TcpStream) -> String {
         let mut buf = Vec::new();
@@ -422,6 +427,133 @@ mod tests {
         let config = HashMap::new();
         let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
         assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn cache_get_and_set_match_pixlet_shape() {
+        let _guard = CACHE_TEST_LOCK.lock().unwrap();
+        init_cache(Some(InMemoryCache::new()));
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"render.star\", \"render\")\n",
+            "load(\"cache.star\", \"cache\")\n",
+            "\n",
+            "def main(config):\n",
+            "    cache.set(\"key_one\", '1')\n",
+            "    cache.set(\"key_two\", '2')\n",
+            "    one, two = cache.get(\"key_one\"), cache.get(\"key_two\")\n",
+            "    if one != '1' or two != '2':\n",
+            "        fail(\"didn't get what I set\")\n",
+            "    three = cache.get(\"key_three\")\n",
+            "    if three != None:\n",
+            "        fail(\"got something I hadn't set\")\n",
+            "    cache.set(\"key_three\", '3')\n",
+            "    three = cache.get(\"key_three\")\n",
+            "    if three != '3':\n",
+            "        fail(\"didn't get the previously unset thing even though I just set it\")\n",
+            "    return [render.Root(child = render.Box()) for _ in range(int(one) + int(two) + int(three))]\n",
+        );
+
+        let config = HashMap::new();
+        let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
+        assert_eq!(roots.len(), 6);
+        init_cache(None);
+    }
+
+    #[test]
+    fn cache_survives_execution_and_scopes_by_applet() {
+        let _guard = CACHE_TEST_LOCK.lock().unwrap();
+        init_cache(Some(InMemoryCache::new()));
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"render.star\", \"render\")\n",
+            "load(\"cache.star\", \"cache\")\n",
+            "\n",
+            "def main(config):\n",
+            "    i = int(cache.get(\"counter\") or '1')\n",
+            "    frames = [render.Root(child = render.Box()) for _ in range(i)]\n",
+            "    cache.set(\"counter\", str(i + 1))\n",
+            "    return frames\n",
+        );
+
+        let config = HashMap::new();
+        assert_eq!(
+            applet.run("test.star", src, &config, 64, 32).unwrap().len(),
+            1
+        );
+        assert_eq!(
+            applet.run("test.star", src, &config, 64, 32).unwrap().len(),
+            2
+        );
+
+        let applet = Applet::new();
+        assert_eq!(
+            applet
+                .run("test2.star", src, &config, 64, 32)
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            applet
+                .run("test2.star", src, &config, 64, 32)
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(
+            applet
+                .run("test2.star", src, &config, 64, 32)
+                .unwrap()
+                .len(),
+            3
+        );
+        init_cache(None);
+    }
+
+    #[test]
+    fn cache_no_init_is_a_noop() {
+        let _guard = CACHE_TEST_LOCK.lock().unwrap();
+        init_cache(None);
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"render.star\", \"render\")\n",
+            "load(\"cache.star\", \"cache\")\n",
+            "\n",
+            "def main(config):\n",
+            "    cache.set(\"key_one\", str(1))\n",
+            "    one, two = cache.get(\"key_one\"), cache.get(\"key_two\")\n",
+            "    if one != None or two != None:\n",
+            "        fail(\"without cache init we should only get None\")\n",
+            "    return render.Root(child = render.Box())\n",
+        );
+
+        let config = HashMap::new();
+        let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn cache_rejects_non_string_values() {
+        let _guard = CACHE_TEST_LOCK.lock().unwrap();
+        init_cache(Some(InMemoryCache::new()));
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"render.star\", \"render\")\n",
+            "load(\"cache.star\", \"cache\")\n",
+            "\n",
+            "def main(config):\n",
+            "    cache.set(\"that's not a string value\", 1)\n",
+            "    return render.Root(child = render.Box())\n",
+        );
+
+        let config = HashMap::new();
+        let err = applet.run("test.star", src, &config, 64, 32).err().unwrap();
+        assert!(
+            err.to_string().contains("string"),
+            "unexpected error: {err}"
+        );
+        init_cache(None);
     }
 
     #[test]
