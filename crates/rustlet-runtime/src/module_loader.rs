@@ -13,6 +13,7 @@ use starlark::values::structs::AllocStruct;
 use starlark::values::Value;
 
 use crate::animation_module::build_animation_globals;
+use crate::applet::SILENT_PRINT_HANDLER;
 use crate::filter_module::build_filter_globals;
 use crate::html_module::build_html_globals;
 use crate::assert_module::build_assert_globals;
@@ -270,6 +271,7 @@ impl AppletFileLoader<'_> {
         {
             let mut eval = Evaluator::new(&module);
             eval.set_loader(&loader);
+            eval.set_print_handler(&SILENT_PRINT_HANDLER);
             eval.eval_module(ast, self.state.globals)
                 .map_err(|e| anyhow!("{e}"))?;
         }

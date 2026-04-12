@@ -6,6 +6,7 @@ use starlark::environment::{Globals, GlobalsBuilder, LibraryExtension, Module};
 use starlark::eval::Evaluator;
 use starlark::syntax::{AstModule, Dialect};
 use starlark::values::ValueLike;
+use starlark::PrintHandler;
 
 use rustlet_render::Root;
 
@@ -22,6 +23,16 @@ use crate::starlark_widgets::StarlarkWidget;
 pub struct Applet {
     globals: Globals,
 }
+
+pub(crate) struct SilentPrintHandler;
+
+impl PrintHandler for SilentPrintHandler {
+    fn println(&self, _text: &str) -> starlark::Result<()> {
+        Ok(())
+    }
+}
+
+pub(crate) static SILENT_PRINT_HANDLER: SilentPrintHandler = SilentPrintHandler;
 
 pub struct AppletRunOptions<'a> {
     pub width: u32,
@@ -45,7 +56,9 @@ impl<'a> AppletRunOptions<'a> {
 
 impl Applet {
     pub fn new() -> Self {
-        let globals = GlobalsBuilder::extended_by(&[LibraryExtension::StructType]).build();
+        let globals =
+            GlobalsBuilder::extended_by(&[LibraryExtension::StructType, LibraryExtension::Print])
+                .build();
         Self { globals }
     }
 
@@ -117,6 +130,7 @@ impl Applet {
 
         let mut eval = Evaluator::new(&module);
         eval.set_loader(&loader);
+        eval.set_print_handler(&SILENT_PRINT_HANDLER);
         eval.eval_module(ast, &self.globals)
             .map_err(|e| anyhow!("{e}"))?;
 
@@ -158,6 +172,7 @@ impl Applet {
 
         let mut eval = Evaluator::new(&module);
         eval.set_loader(&loader);
+        eval.set_print_handler(&SILENT_PRINT_HANDLER);
         eval.eval_module(ast, &self.globals)
             .map_err(|e| anyhow!("{e}"))?;
 
