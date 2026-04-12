@@ -3,6 +3,7 @@ mod applet;
 mod filter_module;
 mod html_module;
 mod i18n_module;
+pub mod manifest;
 mod assert_module;
 mod base64_module;
 mod bsoup_module;
@@ -41,5 +42,6 @@ mod yaml_module;
 mod zipfile_module;
 
 pub use applet::{Applet, AppletRunOptions};
+pub use manifest::Manifest;
 pub use cache_module::{init_cache, InMemoryCache};
 pub use secret_module::{SecretDecryptionKey, SecretEncryptionKey};

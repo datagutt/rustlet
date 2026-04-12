@@ -1,11 +1,12 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::{Command, ExitCode};
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 
 use rustlet_encode::{Filter, OutputFormat};
-use rustlet_runtime::Applet;
+use rustlet_runtime::{manifest::Manifest, Applet};
 
 #[derive(Parser)]
 #[command(name = "rustlet", about = "build apps for pixel-based displays")]
@@ -30,9 +31,40 @@ enum Commands {
         output: Option<PathBuf>,
     },
 
+    /// Lint a .star file or app directory. Parses the file, evaluates it in a
+    /// sandbox, checks for required callables, and validates manifest.yaml when
+    /// present. Returns a non-zero exit code if any issues are found.
+    Lint {
+        /// Paths to lint. Accepts .star files and directories. Defaults to the
+        /// current directory.
+        #[arg(default_value = ".")]
+        paths: Vec<PathBuf>,
+
+        /// Recurse into directories.
+        #[arg(short, long)]
+        recursive: bool,
+    },
+
+    /// Format .star files. Requires `buildifier` on $PATH (same tool pixlet
+    /// uses). If buildifier is missing, prints an error with install
+    /// instructions and exits non-zero.
+    Format {
+        /// Paths to format. Defaults to the current directory.
+        #[arg(default_value = ".")]
+        paths: Vec<PathBuf>,
+
+        /// Preview changes without modifying files.
+        #[arg(short = 'd', long)]
+        dry_run: bool,
+
+        /// Recurse into directories.
+        #[arg(short, long)]
+        recursive: bool,
+    },
+
     /// Render a .star file to an image
     Render {
-        /// Path to the .star file
+        /// Path to the .star file or app directory
         file: PathBuf,
 
         /// Output file path (default: stdout)
@@ -59,7 +91,9 @@ enum Commands {
         #[arg(long, default_value_t = 1)]
         magnify: u32,
 
-        /// Double the canvas size (128x64) and use terminus-16 default font
+        /// Double the canvas size (128x64) and use terminus-16 default font.
+        /// Auto-enabled when the manifest declares `supports2x: true` and the
+        /// applet is loaded from a directory.
         #[arg(long = "2x")]
         double: bool,
 
@@ -75,7 +109,220 @@ enum Format {
     Webp,
 }
 
-fn main() -> Result<()> {
+/// Resolved applet source: the .star body plus the id we should use when
+/// running it, and the optional base directory for `load()` resolution. When
+/// loading from a directory we also parse `manifest.yaml` so commands can use
+/// the declared supports2x flag and id.
+struct LoadedApplet {
+    id: String,
+    source: String,
+    base_dir: Option<PathBuf>,
+    manifest: Option<Manifest>,
+}
+
+fn load_applet(path: &Path) -> Result<LoadedApplet> {
+    if path.is_dir() {
+        let main = path.join("main.star");
+        let source = std::fs::read_to_string(&main)
+            .with_context(|| format!("reading {}", main.display()))?;
+        let manifest_path = path.join(rustlet_runtime::manifest::MANIFEST_FILE_NAME);
+        let manifest = if manifest_path.exists() {
+            Some(Manifest::load_from_path(&manifest_path)?)
+        } else {
+            None
+        };
+        let id = manifest
+            .as_ref()
+            .map(|m| m.id.clone())
+            .unwrap_or_else(|| {
+                path.file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("app")
+                    .to_string()
+            });
+        Ok(LoadedApplet {
+            id,
+            source,
+            base_dir: Some(path.to_path_buf()),
+            manifest,
+        })
+    } else {
+        let source = std::fs::read_to_string(path)
+            .with_context(|| format!("reading {}", path.display()))?;
+        let id = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("app")
+            .to_string();
+        Ok(LoadedApplet {
+            id,
+            source,
+            base_dir: path.parent().map(|p| p.to_path_buf()),
+            manifest: None,
+        })
+    }
+}
+
+/// Collect every `.star` file implied by the given CLI paths. Directories are
+/// scanned for a top-level `main.star`; with `--recursive` every `.star`
+/// descendant is included. A bare `.star` argument is kept as-is.
+fn collect_star_files(paths: &[PathBuf], recursive: bool) -> Result<Vec<PathBuf>> {
+    let mut out = Vec::new();
+    for path in paths {
+        if path.is_file() {
+            out.push(path.clone());
+            continue;
+        }
+        if path.is_dir() {
+            if recursive {
+                walk_recursive(path, &mut out)?;
+            } else {
+                let main = path.join("main.star");
+                if main.exists() {
+                    out.push(main);
+                } else {
+                    // Fall back to top-level .star siblings in the directory.
+                    for entry in std::fs::read_dir(path)? {
+                        let entry = entry?;
+                        let p = entry.path();
+                        if p.extension().and_then(|e| e.to_str()) == Some("star") {
+                            out.push(p);
+                        }
+                    }
+                }
+            }
+            continue;
+        }
+        bail!("path does not exist: {}", path.display());
+    }
+    Ok(out)
+}
+
+fn walk_recursive(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let p = entry.path();
+        if p.is_dir() {
+            walk_recursive(&p, out)?;
+        } else if p.extension().and_then(|e| e.to_str()) == Some("star") {
+            out.push(p);
+        }
+    }
+    Ok(())
+}
+
+fn run_lint(paths: &[PathBuf], recursive: bool) -> Result<bool> {
+    let files = collect_star_files(paths, recursive)?;
+    if files.is_empty() {
+        eprintln!("no .star files found");
+        return Ok(false);
+    }
+
+    let mut had_issue = false;
+    let applet = Applet::new();
+
+    // Lint manifest files next to each app, deduplicated.
+    let mut seen_manifests = std::collections::HashSet::new();
+    for file in &files {
+        if let Some(parent) = file.parent() {
+            let manifest_path = parent.join(rustlet_runtime::manifest::MANIFEST_FILE_NAME);
+            if manifest_path.exists() && seen_manifests.insert(manifest_path.clone()) {
+                match Manifest::load_from_path(&manifest_path) {
+                    Ok(m) => {
+                        let errors = m.validate_all();
+                        if !errors.is_empty() {
+                            had_issue = true;
+                            println!("{}: manifest issues:", manifest_path.display());
+                            for err in errors {
+                                println!("  - {err}");
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        had_issue = true;
+                        println!("{}: {}", manifest_path.display(), e);
+                    }
+                }
+            }
+        }
+
+        let src = std::fs::read_to_string(file)
+            .with_context(|| format!("reading {}", file.display()))?;
+        let id = file
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("app");
+        let base_dir = file.parent();
+        match applet.lint_source(id, &src, base_dir) {
+            Ok(issues) => {
+                if issues.is_empty() {
+                    println!("{}: ok", file.display());
+                } else {
+                    had_issue = true;
+                    println!("{}:", file.display());
+                    for issue in issues {
+                        println!("  - {issue}");
+                    }
+                }
+            }
+            Err(e) => {
+                had_issue = true;
+                println!("{}: {}", file.display(), e);
+            }
+        }
+    }
+
+    Ok(!had_issue)
+}
+
+fn run_format(paths: &[PathBuf], dry_run: bool, recursive: bool) -> Result<bool> {
+    let buildifier = std::env::var("BUILDIFIER").unwrap_or_else(|_| "buildifier".to_string());
+    // Verify buildifier is on PATH.
+    if Command::new(&buildifier)
+        .arg("--version")
+        .output()
+        .is_err()
+    {
+        bail!(
+            "`{buildifier}` not found on PATH. Install it from https://github.com/bazelbuild/buildtools \
+             (e.g. `go install github.com/bazelbuild/buildtools/buildifier@latest`) and re-run."
+        );
+    }
+
+    let files = collect_star_files(paths, recursive)?;
+    if files.is_empty() {
+        eprintln!("no .star files found");
+        return Ok(false);
+    }
+
+    let mode = if dry_run { "diff" } else { "fix" };
+    let mut ok = true;
+    for file in &files {
+        let status = Command::new(&buildifier)
+            .arg("--type=default")
+            .arg(format!("--mode={mode}"))
+            .arg("--lint=off")
+            .arg(file)
+            .status()
+            .with_context(|| format!("running buildifier on {}", file.display()))?;
+        if !status.success() {
+            ok = false;
+        }
+    }
+    Ok(ok)
+}
+
+fn main() -> ExitCode {
+    match run() {
+        Ok(code) => code,
+        Err(e) => {
+            eprintln!("error: {e:#}");
+            ExitCode::from(1)
+        }
+    }
+}
+
+fn run() -> Result<ExitCode> {
     let cli = Cli::parse();
 
     match cli.command {
@@ -83,28 +330,10 @@ fn main() -> Result<()> {
             println!("Rustlet version: {}", env!("CARGO_PKG_VERSION"));
         }
         Commands::Schema { path, output } => {
-            let (src, base_dir, id) = if path.is_dir() {
-                let main = path.join("main.star");
-                let src = std::fs::read_to_string(&main)?;
-                let id = path
-                    .file_name()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("app")
-                    .to_string();
-                (src, Some(path.clone()), id)
-            } else {
-                let src = std::fs::read_to_string(&path)?;
-                let id = path
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("app")
-                    .to_string();
-                (src, path.parent().map(|p| p.to_path_buf()), id)
-            };
-
+            let loaded = load_applet(&path)?;
             let applet = Applet::new();
-            let schema_json = applet.schema_json(&id, &src, base_dir.as_deref())?;
-
+            let schema_json =
+                applet.schema_json(&loaded.id, &loaded.source, loaded.base_dir.as_deref())?;
             match output {
                 Some(path) if path.as_os_str() != "-" => {
                     std::fs::write(&path, schema_json.as_bytes())?;
@@ -113,6 +342,26 @@ fn main() -> Result<()> {
                     println!("{}", schema_json);
                 }
             }
+        }
+        Commands::Lint { paths, recursive } => {
+            let ok = run_lint(&paths, recursive)?;
+            return Ok(if ok {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(1)
+            });
+        }
+        Commands::Format {
+            paths,
+            dry_run,
+            recursive,
+        } => {
+            let ok = run_format(&paths, dry_run, recursive)?;
+            return Ok(if ok {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(1)
+            });
         }
         Commands::Render {
             file,
@@ -129,21 +378,24 @@ fn main() -> Result<()> {
                 rustlet_render::Emoji::set_twemoji_dir(&dir.to_string_lossy());
             }
 
-            let (width, height, is_2x) = if double {
-                (128, 64, true)
-            } else {
-                (width, height, false)
-            };
-
-            let src = std::fs::read_to_string(&file)?;
-            let id = file.file_stem().and_then(|s| s.to_str()).unwrap_or("app");
-
-            let base_dir = file.parent();
+            let loaded = load_applet(&file)?;
+            // `--2x` on the CLI takes precedence; otherwise auto-enable when the
+            // manifest opts in with `supports2x: true`, matching pixlet.
+            let is_2x =
+                double || loaded.manifest.as_ref().map(|m| m.supports2x).unwrap_or(false);
+            let (width, height) = if is_2x { (128, 64) } else { (width, height) };
 
             let applet = Applet::new();
             let config = HashMap::new();
-            let roots =
-                applet.run_with_options(id, &src, &config, width, height, is_2x, base_dir)?;
+            let roots = applet.run_with_options(
+                &loaded.id,
+                &loaded.source,
+                &config,
+                width,
+                height,
+                is_2x,
+                loaded.base_dir.as_deref(),
+            )?;
 
             if roots.is_empty() {
                 bail!("main() returned no roots");
@@ -159,17 +411,14 @@ fn main() -> Result<()> {
             let out_format = match format {
                 Some(Format::Gif) => OutputFormat::Gif,
                 Some(Format::Webp) => OutputFormat::WebP,
-                None => {
-                    // Auto-detect from output extension
-                    match output
-                        .as_ref()
-                        .and_then(|p| p.extension())
-                        .and_then(|e| e.to_str())
-                    {
-                        Some("webp") => OutputFormat::WebP,
-                        _ => OutputFormat::Gif,
-                    }
-                }
+                None => match output
+                    .as_ref()
+                    .and_then(|p| p.extension())
+                    .and_then(|e| e.to_str())
+                {
+                    Some("webp") => OutputFormat::WebP,
+                    _ => OutputFormat::Gif,
+                },
             };
 
             let data = rustlet_encode::encode(&frames, delay_ms, out_format)?;
@@ -184,5 +433,6 @@ fn main() -> Result<()> {
         }
     }
 
-    Ok(())
+    Ok(ExitCode::SUCCESS)
 }
+

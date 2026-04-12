@@ -150,6 +150,68 @@ impl Applet {
         extract_roots(result)
     }
 
+    /// Parse a `.star` source file and return any syntax errors without executing
+    /// it. Used by `rustlet lint` to catch malformed files quickly.
+    pub fn parse_source(&self, id: &str, src: &str) -> Result<()> {
+        AstModule::parse(
+            id,
+            preprocess_starlark_source(src),
+            &Dialect::AllOptionsInternal,
+        )
+        .map_err(|e| anyhow!("{e}"))?;
+        Ok(())
+    }
+
+    /// Full semantic lint pass: parses the source, evaluates it in a sandbox so
+    /// load() resolution runs, and verifies the applet defines a `main` callable.
+    /// Returns a list of lint messages; an empty list means the file is clean.
+    pub fn lint_source(
+        &self,
+        id: &str,
+        src: &str,
+        base_dir: Option<&Path>,
+    ) -> Result<Vec<String>> {
+        let mut issues = Vec::new();
+
+        let ast = match AstModule::parse(
+            id,
+            preprocess_starlark_source(src),
+            &Dialect::AllOptionsInternal,
+        ) {
+            Ok(ast) => ast,
+            Err(e) => {
+                issues.push(format!("parse error: {e}"));
+                return Ok(issues);
+            }
+        };
+
+        seed_for_execution(id);
+        set_request_context(id);
+        set_render_context(false);
+        set_secret_decrypter(None);
+
+        let registry = BuiltinModuleRegistry::new(64, 32, false)?;
+        let module = Module::new();
+        let loader = registry.loader(&self.globals, base_dir);
+
+        let mut eval = Evaluator::new(&module);
+        eval.set_loader(&loader);
+        eval.set_print_handler(&SILENT_PRINT_HANDLER);
+
+        if let Err(e) = eval.eval_module(ast, &self.globals) {
+            issues.push(format!("evaluation error: {e}"));
+            return Ok(issues);
+        }
+
+        if module.get("main").is_none() {
+            issues.push(
+                "script does not define a `main(config)` function".to_string(),
+            );
+        }
+
+        Ok(issues)
+    }
+
     /// Evaluate the applet's `get_schema()` and return its JSON schema, matching
     /// Pixlet's `pixlet schema` output.
     pub fn schema_json(&self, id: &str, src: &str, base_dir: Option<&Path>) -> Result<String> {
