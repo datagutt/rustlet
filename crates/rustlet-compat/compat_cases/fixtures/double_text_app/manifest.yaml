@@ -1,0 +1,7 @@
+---
+id: double-text-fixture
+name: Double Text Fixture
+summary: Compat fixture for 2x text rendering
+desc: Minimal app fixture used by rustlet compat tests for 2x text rendering.
+author: Rustlet
+supports2x: true
