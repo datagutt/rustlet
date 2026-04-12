@@ -1,0 +1,31 @@
+crates/rustlet-runtime/src/json_module.rs
+  02250d0509593572 4,6-8,47-53,63-65,80-83
+crates/rustlet-runtime/src/csv_module.rs
+  02250d0509593572 10-11,23-24,29-30,51-58,66,102-107,109-115
+crates/rustlet-runtime/src/applet.rs
+  02250d0509593572 8,17,138-178
+crates/rustlet-cli/src/main.rs
+  02250d0509593572 19-32,82-116
+crates/rustlet-runtime/src/schema_module.rs
+  02250d0509593572 1-4,7-8,10-135,137-290,292-303,311,314-353,364-382,394-412,420-440,452-502,512-530,541-560,570-588,602-622,632-650,661-680,692-711,720-739,747-785,788,792-793,799-801
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "20fb6777fc83a4e74a1d2b85aef22a53f26af253",
+  "prompts": {
+    "02250d0509593572": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2613f9e-2875-408d-ad2f-f5db6606548a",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "datagutt",
+      "messages": [],
+      "total_additions": 1596,
+      "total_deletions": 277,
+      "accepted_lines": 807,
+      "overriden_lines": 0
+    }
+  }
+}
