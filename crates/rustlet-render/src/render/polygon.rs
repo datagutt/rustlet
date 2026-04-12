@@ -102,7 +102,7 @@ impl Widget for Polygon {
         if let Some(fill_color) = self.fill_color {
             let mut paint = Paint::default();
             paint.set_color(fill_color);
-            paint.anti_alias = false;
+            paint.anti_alias = true;
             pixmap.fill_path(
                 &path,
                 &paint,
@@ -116,7 +116,7 @@ impl Widget for Polygon {
             if self.stroke_width > 0.0 {
                 let mut paint = Paint::default();
                 paint.set_color(stroke_color);
-                paint.anti_alias = false;
+                paint.anti_alias = true;
 
                 let mut stroke = Stroke::default();
                 stroke.width = self.stroke_width;

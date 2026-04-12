@@ -46,7 +46,7 @@ impl Widget for Circle {
             if let Some(path) = circle_path(cx, cy, r) {
                 let mut paint = Paint::default();
                 paint.set_color(color);
-                paint.anti_alias = false;
+                paint.anti_alias = true;
                 pixmap.fill_path(
                     &path,
                     &paint,

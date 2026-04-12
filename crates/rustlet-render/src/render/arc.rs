@@ -111,7 +111,7 @@ impl Widget for Arc {
         if let Some(path) = self.build_path(offset_x, offset_y) {
             let mut paint = Paint::default();
             paint.set_color(self.color);
-            paint.anti_alias = false;
+            paint.anti_alias = true;
 
             let mut stroke = Stroke::default();
             stroke.width = self.width;
