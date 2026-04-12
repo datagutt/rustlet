@@ -1,0 +1,45 @@
+crates/rustlet-runtime/src/animation_module.rs
+  02250d0509593572 1-383
+crates/rustlet-render/src/render/anim/transform.rs
+  02250d0509593572 1-198
+crates/rustlet-render/src/render/anim/positioned.rs
+  02250d0509593572 1-73
+crates/rustlet-render/src/render/mod.rs
+  02250d0509593572 3
+crates/rustlet-render/src/render/anim/keyframe.rs
+  02250d0509593572 1-100
+crates/rustlet-render/src/lib.rs
+  02250d0509593572 6-9
+crates/rustlet-render/src/render/anim/transformation.rs
+  02250d0509593572 1-200
+crates/rustlet-runtime/src/module_loader.rs
+  02250d0509593572 15,151-154
+crates/rustlet-render/src/render/anim/curve.rs
+  02250d0509593572 1-104
+crates/rustlet-runtime/src/lib.rs
+  02250d0509593572 1
+crates/rustlet-render/src/render/anim/direction.rs
+  02250d0509593572 1-171
+crates/rustlet-render/src/render/anim/mod.rs
+  02250d0509593572 1-24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "c7a6e320f866e8287e705910cc823ac368023fbe",
+  "prompts": {
+    "02250d0509593572": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2613f9e-2875-408d-ad2f-f5db6606548a",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "datagutt",
+      "messages": [],
+      "total_additions": 1579,
+      "total_deletions": 93,
+      "accepted_lines": 1264,
+      "overriden_lines": 0
+    }
+  }
+}
