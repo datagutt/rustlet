@@ -1,0 +1,40 @@
+crates/rustlet-runtime/src/module_loader.rs
+  02250d0509593572 19,167-170
+crates/rustlet-runtime/src/lib.rs
+  02250d0509593572 5
+crates/rustlet-runtime/src/i18n_module.rs
+  02250d0509593572 1-225
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "7bba22d73a0f4cd6214181a17c766e02c4315753",
+  "prompts": {
+    "02250d0509593572": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2613f9e-2875-408d-ad2f-f5db6606548a",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "datagutt",
+      "messages": [],
+      "total_additions": 231,
+      "total_deletions": 0,
+      "accepted_lines": 231,
+      "overriden_lines": 0
+    },
+    "0258ab9ba5d0ae4f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d8360-b060-7d02-851a-70edb189cfa2",
+        "model": "gpt-5.4"
+      },
+      "human_author": "datagutt",
+      "messages": [],
+      "total_additions": 4,
+      "total_deletions": 2,
+      "accepted_lines": 0,
+      "overriden_lines": 2
+    }
+  }
+}
