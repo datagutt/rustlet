@@ -1,10 +1,14 @@
-//! Gaussian blur filter using imageproc. The child is rendered into an offscreen
-//! pixmap padded by `ceil(radius * 3)` so the blur does not clip at edges, then
-//! `imageproc::filter::gaussian_blur_f32` is applied and the result composited back.
+//! Gaussian blur matching bild's implementation exactly.
+//!
+//! bild (pixlet's upstream) uses a 1D Gaussian of length `ceil(2*radius + 1)`
+//! with coefficients `exp(-x^2 / (4 * radius))` for x in `[-radius, radius]`,
+//! normalized. It runs this kernel separably (horizontal then vertical) over
+//! edge-extended padding. imageproc's `gaussian_blur_f32` uses a wider kernel
+//! derived from sigma, which produces noticeably more spread at small radii;
+//! to match pixlet exactly we implement bild's kernel directly.
 
 use super::composite_pixmap;
 use crate::render::{Rect, Widget};
-use image::{ImageBuffer, Rgba};
 use tiny_skia::Pixmap;
 
 pub struct Blur {
@@ -24,63 +28,108 @@ impl Widget for Blur {
     }
 
     fn paint(&self, dest: &mut Pixmap, bounds: Rect, frame_idx: i32) {
+        if self.radius <= 0.0 {
+            // No-op blur: just draw the child normally.
+            let Some((src, cb)) = super::render_child_to_pixmap(&*self.child, bounds, frame_idx)
+            else {
+                return;
+            };
+            composite_pixmap(dest, &src, bounds.x + cb.x, bounds.y + cb.y);
+            return;
+        }
+
         let padding = (self.radius * 3.0).ceil() as i32;
         let cb = self.child.paint_bounds(bounds, frame_idx);
 
-        // Render child into a padded pixmap.
         let tw = (cb.width + 2 * padding).max(1) as u32;
         let th = (cb.height + 2 * padding).max(1) as u32;
         let Some(mut tmp) = Pixmap::new(tw, th) else {
             return;
         };
-        // Paint child offset by padding via bounds.
         self.child.paint(
             &mut tmp,
             Rect::new(padding, padding, cb.width, cb.height),
             frame_idx,
         );
 
-        // Convert the pixmap to an image::ImageBuffer and run the blur.
-        let buf = pixmap_to_rgba_unpremul(&tmp);
-        let blurred = imageproc::filter::gaussian_blur_f32(&buf, self.radius as f32);
-        rgba_unpremul_to_pixmap(&blurred, &mut tmp);
+        // Blur the premultiplied bytes directly. bild (via Go's `image.RGBA`)
+        // blurs premultiplied channels, which is what pixlet compares against.
+        // Unpremultiplying first would darken the result after re-premultiply.
+        gaussian_blur_bild(tmp.data_mut(), tw as usize, th as usize, self.radius as f32);
 
         composite_pixmap(dest, &tmp, bounds.x, bounds.y);
     }
 }
 
-pub(crate) fn pixmap_to_rgba_unpremul(pixmap: &Pixmap) -> ImageBuffer<Rgba<u8>, Vec<u8>> {
-    let w = pixmap.width();
-    let h = pixmap.height();
-    let mut out: Vec<u8> = Vec::with_capacity((w * h * 4) as usize);
-    for chunk in pixmap.data().chunks_exact(4) {
-        let (r, g, b, a) = (chunk[0], chunk[1], chunk[2], chunk[3]);
-        if a == 0 {
-            out.extend_from_slice(&[0, 0, 0, 0]);
-            continue;
-        }
-        let inv = 255.0 / a as f32;
-        let rr = (r as f32 * inv).clamp(0.0, 255.0) as u8;
-        let gg = (g as f32 * inv).clamp(0.0, 255.0) as u8;
-        let bb = (b as f32 * inv).clamp(0.0, 255.0) as u8;
-        out.extend_from_slice(&[rr, gg, bb, a]);
+/// Build bild's 1D Gaussian kernel: `exp(-x^2 / (4*radius))` over
+/// `x = -radius..radius` with `ceil(2*radius + 1)` samples, then normalize.
+fn build_kernel(radius: f32) -> Vec<f32> {
+    let length = (2.0 * radius + 1.0).ceil() as usize;
+    let mut kernel = Vec::with_capacity(length);
+    let mut x = -radius;
+    for _ in 0..length {
+        kernel.push((-(x * x) / (4.0 * radius)).exp());
+        x += 1.0;
     }
-    ImageBuffer::from_raw(w, h, out).expect("pixmap rgba conversion")
+    let sum: f32 = kernel.iter().sum();
+    for v in kernel.iter_mut() {
+        *v /= sum;
+    }
+    kernel
 }
 
-pub(crate) fn rgba_unpremul_to_pixmap(buf: &ImageBuffer<Rgba<u8>, Vec<u8>>, pixmap: &mut Pixmap) {
-    let data = pixmap.data_mut();
-    for (chunk, px) in data.chunks_exact_mut(4).zip(buf.pixels()) {
-        let [r, g, b, a] = px.0;
-        if a == 0 {
-            chunk.copy_from_slice(&[0, 0, 0, 0]);
-            continue;
+/// In-place separable Gaussian blur on a straight-RGBA byte buffer. Uses edge
+/// extension for out-of-bounds samples to match bild's `EdgeExtend` padding.
+fn gaussian_blur_bild(buf: &mut [u8], w: usize, h: usize, radius: f32) {
+    let kernel = build_kernel(radius);
+    let k_radius = (kernel.len() / 2) as isize;
+
+    let mut temp = vec![0u8; buf.len()];
+
+    // Horizontal pass: buf -> temp
+    for y in 0..h {
+        for x in 0..w {
+            let mut r = 0.0_f32;
+            let mut g = 0.0_f32;
+            let mut b = 0.0_f32;
+            let mut a = 0.0_f32;
+            for (ki, kv) in kernel.iter().enumerate() {
+                let sx = (x as isize + ki as isize - k_radius).clamp(0, w as isize - 1) as usize;
+                let idx = (y * w + sx) * 4;
+                r += buf[idx] as f32 * kv;
+                g += buf[idx + 1] as f32 * kv;
+                b += buf[idx + 2] as f32 * kv;
+                a += buf[idx + 3] as f32 * kv;
+            }
+            let di = (y * w + x) * 4;
+            temp[di] = r.clamp(0.0, 255.0) as u8;
+            temp[di + 1] = g.clamp(0.0, 255.0) as u8;
+            temp[di + 2] = b.clamp(0.0, 255.0) as u8;
+            temp[di + 3] = a.clamp(0.0, 255.0) as u8;
         }
-        let af = a as f32 / 255.0;
-        chunk[0] = (r as f32 * af).round() as u8;
-        chunk[1] = (g as f32 * af).round() as u8;
-        chunk[2] = (b as f32 * af).round() as u8;
-        chunk[3] = a;
+    }
+
+    // Vertical pass: temp -> buf
+    for y in 0..h {
+        for x in 0..w {
+            let mut r = 0.0_f32;
+            let mut g = 0.0_f32;
+            let mut b = 0.0_f32;
+            let mut a = 0.0_f32;
+            for (ki, kv) in kernel.iter().enumerate() {
+                let sy = (y as isize + ki as isize - k_radius).clamp(0, h as isize - 1) as usize;
+                let idx = (sy * w + x) * 4;
+                r += temp[idx] as f32 * kv;
+                g += temp[idx + 1] as f32 * kv;
+                b += temp[idx + 2] as f32 * kv;
+                a += temp[idx + 3] as f32 * kv;
+            }
+            let di = (y * w + x) * 4;
+            buf[di] = r.clamp(0.0, 255.0) as u8;
+            buf[di + 1] = g.clamp(0.0, 255.0) as u8;
+            buf[di + 2] = b.clamp(0.0, 255.0) as u8;
+            buf[di + 3] = a.clamp(0.0, 255.0) as u8;
+        }
     }
 }
 
@@ -106,5 +155,13 @@ mod tests {
         assert_eq!(pb.width, 4 + 2 * 6);
         assert_eq!(pb.height, 4 + 2 * 6);
     }
-}
 
+    #[test]
+    fn kernel_normalizes_to_one() {
+        let k = build_kernel(2.0);
+        let sum: f32 = k.iter().sum();
+        assert!((sum - 1.0).abs() < 1e-5);
+        // bild's length = ceil(2*2 + 1) = 5
+        assert_eq!(k.len(), 5);
+    }
+}
