@@ -1,0 +1,23 @@
+crates/rustlet-render/src/render/text.rs
+  0258ab9ba5d0ae4f 108-111,132
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "2adfbae0d2c9630630c284453afafbb5e13beaad",
+  "prompts": {
+    "0258ab9ba5d0ae4f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d8360-b060-7d02-851a-70edb189cfa2",
+        "model": "gpt-5.4"
+      },
+      "human_author": "datagutt",
+      "messages": [],
+      "total_additions": 5,
+      "total_deletions": 2,
+      "accepted_lines": 5,
+      "overriden_lines": 0
+    }
+  }
+}
