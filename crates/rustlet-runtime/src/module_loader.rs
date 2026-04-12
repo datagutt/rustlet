@@ -16,6 +16,7 @@ use crate::animation_module::build_animation_globals;
 use crate::applet::SILENT_PRINT_HANDLER;
 use crate::filter_module::build_filter_globals;
 use crate::html_module::build_html_globals;
+use crate::i18n_module::build_i18n_globals;
 use crate::assert_module::build_assert_globals;
 use crate::base64_module::build_base64_globals;
 use crate::bsoup_module::build_bsoup_globals;
@@ -162,6 +163,10 @@ impl BuiltinModuleRegistry {
         modules.insert(
             "html.star".to_string(),
             build_simple_frozen_module("html", build_html_globals())?,
+        );
+        modules.insert(
+            "i18n.star".to_string(),
+            build_simple_frozen_module("i18n", build_i18n_globals())?,
         );
         Ok(Self { modules })
     }
