@@ -180,6 +180,8 @@ fn extract_single_root(sw: &StarlarkWidget) -> Result<Root> {
 mod tests {
     use super::*;
     use base64::Engine as _;
+    use flate2::write::GzEncoder;
+    use flate2::Compression;
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -1684,6 +1686,78 @@ def main(config):
         let roots = applet
             .run("test.star", &src, &HashMap::new(), 64, 32)
             .unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn pixlet_gzip_module_decompresses_text_and_bytes() {
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(b"hello world").unwrap();
+        let payload = base64::engine::general_purpose::STANDARD.encode(encoder.finish().unwrap());
+
+        let src = format!(
+            concat!(
+                "load(\"assert.star\", \"assert\")\n",
+                "load(\"compress/gzip.star\", \"gzip\")\n",
+                "load(\"encoding/base64.star\", \"base64\")\n",
+                "load(\"render.star\", \"render\")\n",
+                "\n",
+                "PAYLOAD = {:?}\n",
+                "\n",
+                "def main(config):\n",
+                "    data = gzip.decompress(base64.decode(PAYLOAD))\n",
+                "    assert.eq(data, \"hello world\")\n",
+                "    return render.Root(child = render.Box())\n",
+            ),
+            payload
+        );
+
+        let applet = Applet::new();
+        let roots = applet.run("test.star", &src, &HashMap::new(), 64, 32).unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn pixlet_csv_module_matches_reference_shape() {
+        let src = concat!(
+            "load(\"assert.star\", \"assert\")\n",
+            "load(\"encoding/csv.star\", \"csv\")\n",
+            "load(\"render.star\", \"render\")\n",
+            "\n",
+            "DOC = \"# comment\\na,b\\n c , d\\n\"\n",
+            "\n",
+            "def main(config):\n",
+            "    rows = csv.read_all(DOC, comment = '#', trim_leading_space = True)\n",
+            "    assert.eq(rows, [[\"a\", \"b\"], [\"c \", \"d\"]])\n",
+            "    assert.eq(csv.write_all(rows), \"a,b\\nc ,d\\n\")\n",
+            "    return render.Root(child = render.Box())\n",
+        );
+
+        let applet = Applet::new();
+        let roots = applet.run("test.star", src, &HashMap::new(), 64, 32).unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn pixlet_yaml_module_matches_reference_shape() {
+        let src = concat!(
+            "load(\"assert.star\", \"assert\")\n",
+            "load(\"encoding/yaml.star\", \"yaml\")\n",
+            "load(\"render.star\", \"render\")\n",
+            "\n",
+            "DOC = \"message: Hello\\nitems:\\n  - 1\\n  - 2\\n\"\n",
+            "\n",
+            "def main(config):\n",
+            "    data = yaml.decode(DOC)\n",
+            "    assert.eq(data[\"message\"], \"Hello\")\n",
+            "    assert.eq(data[\"items\"], [1, 2])\n",
+            "    out = yaml.encode({\"message\": \"Hello\", \"items\": [1, 2]}, indent = 4)\n",
+            "    assert.eq(yaml.decode(out)[\"items\"], [1, 2])\n",
+            "    return render.Root(child = render.Box())\n",
+        );
+
+        let applet = Applet::new();
+        let roots = applet.run("test.star", src, &HashMap::new(), 64, 32).unwrap();
         assert_eq!(roots.len(), 1);
     }
 }

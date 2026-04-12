@@ -17,6 +17,8 @@ use crate::base64_module::build_base64_globals;
 use crate::bsoup_module::build_bsoup_globals;
 use crate::cache_module::build_cache_globals;
 use crate::color_module::build_color_globals;
+use crate::csv_module::build_csv_globals;
+use crate::gzip_module::build_gzip_globals;
 use crate::hash_module::build_hash_globals;
 use crate::hmac_module::build_hmac_globals;
 use crate::http_module::build_http_globals;
@@ -35,6 +37,7 @@ use crate::strings_module::build_strings_globals;
 use crate::sunrise_module::build_sunrise_globals;
 use crate::time_module::build_time_globals;
 use crate::xpath_module::build_xpath_globals;
+use crate::yaml_module::build_yaml_globals;
 use crate::zipfile_module::build_zipfile_globals;
 
 pub(crate) struct BuiltinModuleRegistry {
@@ -57,8 +60,16 @@ impl BuiltinModuleRegistry {
             build_simple_frozen_module("base64", build_base64_globals())?,
         );
         modules.insert(
+            "encoding/csv.star".to_string(),
+            build_simple_frozen_module("csv", build_csv_globals())?,
+        );
+        modules.insert(
             "encoding/json.star".to_string(),
             build_simple_frozen_module("json", build_json_globals())?,
+        );
+        modules.insert(
+            "encoding/yaml.star".to_string(),
+            build_simple_frozen_module("yaml", build_yaml_globals())?,
         );
         modules.insert("math.star".to_string(), build_math_frozen_module()?);
         modules.insert(
@@ -131,6 +142,10 @@ impl BuiltinModuleRegistry {
         modules.insert(
             "compress/zipfile.star".to_string(),
             build_simple_frozen_module("zipfile", build_zipfile_globals())?,
+        );
+        modules.insert(
+            "compress/gzip.star".to_string(),
+            build_simple_frozen_module("gzip", build_gzip_globals())?,
         );
         Ok(Self { modules })
     }

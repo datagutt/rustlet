@@ -4,7 +4,9 @@ mod base64_module;
 mod bsoup_module;
 mod cache_module;
 mod color_module;
+mod csv_module;
 mod execution_context;
+mod gzip_module;
 mod hash_module;
 mod hmac_module;
 mod http_module;
@@ -31,6 +33,7 @@ mod strings_module;
 mod sunrise_module;
 mod time_module;
 mod xpath_module;
+mod yaml_module;
 mod zipfile_module;
 
 pub use applet::{Applet, AppletRunOptions};

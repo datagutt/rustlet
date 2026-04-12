@@ -67,7 +67,10 @@ pub(crate) fn starlark_to_serde(value: Value) -> anyhow::Result<serde_json::Valu
     ))
 }
 
-fn json_to_starlark<'v>(json: &serde_json::Value, heap: &'v Heap) -> anyhow::Result<Value<'v>> {
+pub(crate) fn json_to_starlark<'v>(
+    json: &serde_json::Value,
+    heap: &'v Heap,
+) -> anyhow::Result<Value<'v>> {
     match json {
         serde_json::Value::Null => Ok(Value::new_none()),
         serde_json::Value::Bool(b) => Ok(Value::new_bool(*b)),
