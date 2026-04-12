@@ -1,0 +1,41 @@
+crates/rustlet-compat/compat_cases/fixtures/image_png.star
+  0258ab9ba5d0ae4f 1-12
+crates/rustlet-compat/compat_cases/fixtures/image_gif.star
+  0258ab9ba5d0ae4f 1-12
+crates/rustlet-compat/compat_cases/fixtures/box_text.star
+  0258ab9ba5d0ae4f 1-19
+crates/rustlet-compat/compat_cases/cases.json
+  0258ab9ba5d0ae4f 1-73
+crates/rustlet-compat/compat_cases/fixtures/wrapped_text.star
+  0258ab9ba5d0ae4f 1-20
+crates/rustlet-compat/Cargo.toml
+  0258ab9ba5d0ae4f 1-15
+crates/rustlet-compat/src/lib.rs
+  0258ab9ba5d0ae4f 1-805
+crates/rustlet-compat/compat_cases/fixtures/double_text.star
+  0258ab9ba5d0ae4f 1-17
+crates/rustlet-compat/compat_cases/fixtures/row_column.star
+  0258ab9ba5d0ae4f 1-22
+crates/rustlet-compat/tests/compat.rs
+  0258ab9ba5d0ae4f 1-58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "aad627de347ee484d29f1f146bdcabcb12092289",
+  "prompts": {
+    "0258ab9ba5d0ae4f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d8360-b060-7d02-851a-70edb189cfa2",
+        "model": "gpt-5.4"
+      },
+      "human_author": "datagutt",
+      "messages": [],
+      "total_additions": 1053,
+      "total_deletions": 0,
+      "accepted_lines": 1053,
+      "overriden_lines": 0
+    }
+  }
+}
