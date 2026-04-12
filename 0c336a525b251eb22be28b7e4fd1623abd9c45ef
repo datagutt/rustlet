@@ -1,0 +1,23 @@
+crates/rustlet-render/src/render/filter/blur.rs
+  02250d0509593572 1-8,31-40,55-58,64-72,74-78,81-131,159-167
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "0c336a525b251eb22be28b7e4fd1623abd9c45ef",
+  "prompts": {
+    "02250d0509593572": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2613f9e-2875-408d-ad2f-f5db6606548a",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "datagutt",
+      "messages": [],
+      "total_additions": 113,
+      "total_deletions": 56,
+      "accepted_lines": 103,
+      "overriden_lines": 0
+    }
+  }
+}
