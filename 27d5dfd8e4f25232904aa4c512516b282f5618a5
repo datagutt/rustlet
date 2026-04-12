@@ -1,0 +1,31 @@
+crates/rustlet-runtime/Cargo.toml
+  02250d0509593572 34
+crates/rustlet-runtime/src/lib.rs
+  02250d0509593572 6,45
+crates/rustlet-runtime/src/applet.rs
+  02250d0509593572 153-214
+crates/rustlet-cli/src/main.rs
+  02250d0509593572 2-3,5,9,34-64,67,94-96,112-312,315-325,333,335-336,346-364,381-386,390-398,414-421,436,438
+crates/rustlet-runtime/src/manifest.rs
+  02250d0509593572 1-246
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "27d5dfd8e4f25232904aa4c512516b282f5618a5",
+  "prompts": {
+    "02250d0509593572": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2613f9e-2875-408d-ad2f-f5db6606548a",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "datagutt",
+      "messages": [],
+      "total_additions": 620,
+      "total_deletions": 59,
+      "accepted_lines": 613,
+      "overriden_lines": 0
+    }
+  }
+}
