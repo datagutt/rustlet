@@ -216,7 +216,7 @@ pub fn run_case(workspace_root: &Path, crate_root: &Path, case: CompatCase) -> R
 }
 
 pub fn pixlet_available(workspace_root: &Path) -> bool {
-    build_pixlet_binary(workspace_root).is_ok() && build_webp_dump_binary(workspace_root).is_ok()
+    resolve_pixlet_binary(workspace_root).is_ok() && build_webp_dump_binary(workspace_root).is_ok()
 }
 
 fn default_width() -> u32 {
@@ -293,7 +293,7 @@ fn run_rustlet_case(workspace_root: &Path, crate_root: &Path, case: &CompatCase)
 }
 
 fn run_pixlet_case(workspace_root: &Path, crate_root: &Path, case: &CompatCase) -> Result<NormalizedRun> {
-    let pixlet = build_pixlet_binary(workspace_root)?;
+    let pixlet = resolve_pixlet_binary(workspace_root)?;
     let case_path = resolve_case_path(workspace_root, crate_root, case)?;
     let temp = tempdir().context("failed to create temp dir for pixlet output")?;
     let ext = match case.output_format {
@@ -661,6 +661,21 @@ fn build_pixlet_binary(workspace_root: &Path) -> Result<PathBuf> {
     Ok(binary)
 }
 
+fn resolve_pixlet_binary(workspace_root: &Path) -> Result<PathBuf> {
+    if let Some(path) = env::var_os("RUSTLET_COMPAT_PIXLET") {
+        let path = PathBuf::from(path);
+        if path.exists() {
+            return Ok(path);
+        }
+    }
+
+    if let Some(path) = find_path_binary("pixlet") {
+        return Ok(path);
+    }
+
+    build_pixlet_binary(workspace_root)
+}
+
 fn build_webp_dump_binary(workspace_root: &Path) -> Result<PathBuf> {
     let tools_dir = workspace_root.join("target/compat-tools");
     fs::create_dir_all(&tools_dir).context("failed to create target/compat-tools")?;
@@ -679,6 +694,18 @@ fn build_webp_dump_binary(workspace_root: &Path) -> Result<PathBuf> {
         .context("failed to write webp dump go.mod")?;
     fs::write(src_dir.join("main.go"), WEBP_DUMP_MAIN_GO)
         .context("failed to write webp dump main.go")?;
+
+    let tidy_status = Command::new("go")
+        .current_dir(&src_dir)
+        .env("GOPATH", &gopath)
+        .env("GOMODCACHE", &gomodcache)
+        .arg("mod")
+        .arg("tidy")
+        .status()
+        .context("failed to invoke go mod tidy for webp dump helper")?;
+    if !tidy_status.success() {
+        bail!("go mod tidy failed for webp dump helper");
+    }
 
     let status = Command::new("go")
         .current_dir(&src_dir)
@@ -708,6 +735,24 @@ fn decode_hex(input: &str) -> Result<Vec<u8>> {
         idx += 2;
     }
     Ok(out)
+}
+
+fn find_path_binary(name: &str) -> Option<PathBuf> {
+    let path = env::var_os("PATH")?;
+    for dir in env::split_paths(&path) {
+        let candidate = dir.join(name);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+        #[cfg(windows)]
+        {
+            let candidate_exe = dir.join(format!("{name}.exe"));
+            if candidate_exe.is_file() {
+                return Some(candidate_exe);
+            }
+        }
+    }
+    None
 }
 
 fn hex_nibble(byte: u8) -> Result<u8> {
