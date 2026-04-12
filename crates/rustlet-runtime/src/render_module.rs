@@ -100,6 +100,10 @@ fn extract_children(
     let mut widgets = Vec::with_capacity(list.len());
     let mut attrs = Vec::with_capacity(list.len());
     for item in list.iter() {
+        if item.is_none() {
+            attrs.push(WidgetAttrValue::None);
+            continue;
+        }
         let sw = StarlarkWidget::from_value(item)
             .ok_or_else(|| anyhow::anyhow!("child must be a Widget, got {}", item.get_type()))?;
         widgets.push(sw.take_widget()?);

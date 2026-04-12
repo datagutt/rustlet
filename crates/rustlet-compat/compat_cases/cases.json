@@ -52,6 +52,28 @@
       "policy": "exact"
     },
     {
+      "id": "partyparrot_app",
+      "kind": "reference_app",
+      "path": ".reference/apps/apps/partyparrot",
+      "output_format": "gif",
+      "max_frames": 16,
+      "policy": "exact"
+    },
+    {
+      "id": "text_regular_app",
+      "kind": "reference_app",
+      "path": ".reference/apps/apps/text-regular",
+      "output_format": "webp",
+      "policy": "exact"
+    },
+    {
+      "id": "text_title_app",
+      "kind": "reference_app",
+      "path": ".reference/apps/apps/text-title",
+      "output_format": "webp",
+      "policy": "exact"
+    },
+    {
       "id": "aquarium_app",
       "kind": "reference_app",
       "path": ".reference/apps/apps/aquarium",

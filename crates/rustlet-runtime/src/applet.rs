@@ -1818,4 +1818,35 @@ def main(config):
         let roots = applet.run("test.star", src, &HashMap::new(), 64, 32).unwrap();
         assert_eq!(roots.len(), 1);
     }
+
+    #[test]
+    fn pixlet_print_builtin_is_available() {
+        let src = concat!(
+            "load(\"render.star\", \"render\")\n",
+            "\n",
+            "def main(config):\n",
+            "    print(\"hello\", 123)\n",
+            "    return render.Root(child = render.Box())\n",
+        );
+
+        let applet = Applet::new();
+        let roots = applet.run("test.star", src, &HashMap::new(), 64, 32).unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn pixlet_children_lists_ignore_none_entries() {
+        let src = concat!(
+            "load(\"render.star\", \"render\")\n",
+            "\n",
+            "def main(config):\n",
+            "    return render.Root(\n",
+            "        child = render.Row(children = [render.Box(width = 1, height = 1), None]),\n",
+            "    )\n",
+        );
+
+        let applet = Applet::new();
+        let roots = applet.run("test.star", src, &HashMap::new(), 64, 32).unwrap();
+        assert_eq!(roots.len(), 1);
+    }
 }
