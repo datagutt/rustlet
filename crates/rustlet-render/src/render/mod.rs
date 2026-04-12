@@ -1,5 +1,6 @@
 mod root;
 
+pub mod anim;
 pub mod animation;
 pub mod arc;
 pub mod box_widget;

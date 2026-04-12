@@ -3,6 +3,10 @@ pub mod fonts;
 pub mod render;
 
 pub use color::parse_color;
+pub use render::anim::{
+    AnimatedPositioned, Curve, Direction, FillMode, Keyframe, Origin, Rounding, Transform,
+    Transformation,
+};
 pub use render::animation::Animation;
 pub use render::arc::Arc;
 pub use render::box_widget::BoxWidget;

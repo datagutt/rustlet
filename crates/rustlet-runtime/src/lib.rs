@@ -1,3 +1,4 @@
+mod animation_module;
 mod applet;
 mod assert_module;
 mod base64_module;
