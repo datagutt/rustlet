@@ -1,0 +1,43 @@
+crates/rustlet-render/src/render/filter/convolution.rs
+  02250d0509593572 1-136
+crates/rustlet-render/src/render/filter/blur.rs
+  02250d0509593572 1-110
+crates/rustlet-render/src/render/filter/transform.rs
+  02250d0509593572 1-117
+crates/rustlet-render/src/render/mod.rs
+  02250d0509593572 11
+crates/rustlet-render/src/render/filter/mod.rs
+  02250d0509593572 1-80
+crates/rustlet-render/src/lib.rs
+  02250d0509593572 11-18
+crates/rustlet-render/Cargo.toml
+  02250d0509593572 10
+crates/rustlet-runtime/src/filter_module.rs
+  02250d0509593572 1-322
+crates/rustlet-render/src/render/filter/color_ops.rs
+  02250d0509593572 1-397
+crates/rustlet-runtime/src/module_loader.rs
+  02250d0509593572 16,156-159
+crates/rustlet-runtime/src/lib.rs
+  02250d0509593572 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "53959b0100cd56037b6c458954208e1f06fe83e7",
+  "prompts": {
+    "02250d0509593572": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2613f9e-2875-408d-ad2f-f5db6606548a",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "datagutt",
+      "messages": [],
+      "total_additions": 1196,
+      "total_deletions": 18,
+      "accepted_lines": 1178,
+      "overriden_lines": 0
+    }
+  }
+}
