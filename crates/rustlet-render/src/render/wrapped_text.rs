@@ -239,6 +239,18 @@ impl Widget for WrappedText {
         } else {
             bounds.width
         };
+        let clip_width = if self.width > 0 {
+            self.width
+        } else {
+            bounds.width
+        };
+        let clip_height = if self.height > 0 {
+            self.height
+        } else {
+            bounds.height
+        };
+        let clip_right = bounds.x + clip_width;
+        let clip_bottom = bounds.y + clip_height;
         let lines = self.wrap_lines(wrap_width);
 
         let premul = premultiply_color(self.color);
@@ -249,6 +261,10 @@ impl Widget for WrappedText {
         let mut cursor_y = bounds.y;
 
         for line in &lines {
+            if cursor_y >= clip_bottom {
+                break;
+            }
+
             // Compute line width for alignment
             let visual_line = visual_bidi_string(line);
             let line_width = font.measure_width(visual_line.as_ref());
@@ -268,9 +284,11 @@ impl Widget for WrappedText {
                             if glyph.pixel(col, row) {
                                 let px = cursor_x + glyph.x_offset as i32 + col as i32;
                                 let py = cursor_y + row as i32;
-                                if px >= 0
+                                if px >= bounds.x
+                                    && px < clip_right
                                     && (px as usize) < dst_w
-                                    && py >= 0
+                                    && py >= bounds.y
+                                    && py < clip_bottom
                                     && (py as usize) < dst_h
                                 {
                                     pixels[py as usize * dst_w + px as usize] = premul;
