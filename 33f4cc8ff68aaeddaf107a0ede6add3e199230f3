@@ -1,0 +1,51 @@
+crates/rustlet-runtime/src/applet.rs
+  c2674318d428166a 11,16,24-43,62,74-94,98-102,104,114,189,1684-1686
+  9c3dc2bfb892cad5 192,196-235,1621-1683,1687
+crates/rustlet-runtime/src/module_loader.rs
+  c2674318d428166a 31,68-70
+crates/rustlet-runtime/Cargo.toml
+  9c3dc2bfb892cad5 32
+  c2674318d428166a 31
+crates/rustlet-runtime/src/secret_module.rs
+  9c3dc2bfb892cad5 9,13,25-33,60,79
+  c2674318d428166a 1-8,10-12,14-24,34-59,61-78,80-129
+PIXLET_COMPATIBILITY_TODO.md
+  c2674318d428166a 98
+crates/rustlet-runtime/src/lib.rs
+  c2674318d428166a 20,36,38
+crates/rustlet-runtime/src/execution_context.rs
+  c2674318d428166a 3-4,7,20-33
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "33f4cc8ff68aaeddaf107a0ede6add3e199230f3",
+  "prompts": {
+    "9c3dc2bfb892cad5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d8292-0b45-7aa0-a365-9649da3d88f8",
+        "model": "gpt-5.4"
+      },
+      "human_author": "datagutt",
+      "messages": [],
+      "total_additions": 122,
+      "total_deletions": 5,
+      "accepted_lines": 120,
+      "overriden_lines": 0
+    },
+    "c2674318d428166a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d69c4-8861-7ee2-a199-7ecc8aca867d",
+        "model": "gpt-5.4"
+      },
+      "human_author": "datagutt",
+      "messages": [],
+      "total_additions": 209,
+      "total_deletions": 12,
+      "accepted_lines": 199,
+      "overriden_lines": 0
+    }
+  }
+}
