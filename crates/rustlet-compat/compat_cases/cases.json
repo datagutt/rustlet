@@ -74,6 +74,25 @@
       "policy": "exact"
     },
     {
+      "id": "emoji_text_app",
+      "kind": "reference_app",
+      "path": ".reference/apps/apps/emojitext",
+      "output_format": "webp",
+      "policy": "exact"
+    },
+    {
+      "id": "wifi_qrcode_app",
+      "kind": "reference_app",
+      "path": ".reference/apps/apps/wifiqrcode",
+      "config": {
+        "ssid": "Rustlet",
+        "password": "compat123",
+        "encryption": "WPA"
+      },
+      "output_format": "webp",
+      "policy": "exact"
+    },
+    {
       "id": "aquarium_app",
       "kind": "reference_app",
       "path": ".reference/apps/apps/aquarium",
