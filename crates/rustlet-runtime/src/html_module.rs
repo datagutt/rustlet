@@ -1,69 +1,116 @@
-//! Starlark bindings for pixlet's `html.star`. Wraps the `scraper` crate to give
-//! applets a goquery/jQuery-like API: parse an HTML string with `html(body=...)`
-//! then navigate via `.find(selector)`, `.children()`, `.attr(name)`, `.text()`.
+//! Starlark bindings for pixlet's `html.star`. Wraps the `scraper` crate
+//! (html5ever + CSS selectors) to give applets a goquery/jQuery-like API:
+//! `html(body=...)`, `.find(selector)`, `.children()`, `.attr(name)`, `.text()`.
 //!
-//! The returned `Selection` is immutable, single-shot data and held by id inside
-//! a small per-document table, so traversal methods can return new Selections
-//! without reparsing the source.
+//! `scraper::Html` is not `Sync` because tendril uses interior mutability, so
+//! we can't hold an `Arc<Html>` across the Starlark boundary. Instead we store
+//! the raw source string plus each selection's address (a path of child
+//! indices from the document root). On every method call we re-parse and walk
+//! to those addresses, then query with the real HTML parser. Parsing a small
+//! pixlet applet payload takes microseconds so this is fine in practice.
 
 use std::fmt;
 
 use allocative::Allocative;
-use scraper::{Html, Node, Selector};
+use scraper::{ElementRef, Html, Selector};
 use starlark::environment::{GlobalsBuilder, Methods, MethodsBuilder, MethodsStatic};
 use starlark::starlark_simple_value;
-use starlark::values::none::NoneType;
 use starlark::values::{
     Heap, NoSerialize, ProvidesStaticType, StarlarkValue, Value, ValueLike,
 };
 use starlark_derive::starlark_value;
 
-use ego_tree::NodeId;
+/// A path from the document's root to a specific element, encoded as a list of
+/// child indices at each depth. The root itself is an empty path.
+#[derive(Debug, Clone, Allocative, Default)]
+pub struct NodePath(#[allocative(skip)] Vec<usize>);
 
 #[derive(Debug, ProvidesStaticType, NoSerialize, Allocative)]
 pub struct StarlarkHtmlSelection {
     #[allocative(skip)]
-    html: std::sync::Arc<Html>,
-    #[allocative(skip)]
-    nodes: Vec<NodeId>,
+    source: String,
+    paths: Vec<NodePath>,
 }
 
 starlark_simple_value!(StarlarkHtmlSelection);
 
 impl fmt::Display for StarlarkHtmlSelection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "<Selection {} nodes>", self.nodes.len())
+        write!(f, "<Selection {} nodes>", self.paths.len())
     }
 }
 
 impl StarlarkHtmlSelection {
-    fn new(html: std::sync::Arc<Html>, nodes: Vec<NodeId>) -> Self {
-        Self { html, nodes }
+    fn new(source: String, paths: Vec<NodePath>) -> Self {
+        Self { source, paths }
     }
 
-    fn alloc_new<'v>(
-        heap: &'v Heap,
-        html: std::sync::Arc<Html>,
-        nodes: Vec<NodeId>,
-    ) -> Value<'v> {
-        heap.alloc(StarlarkHtmlSelection::new(html, nodes))
+    fn alloc_new<'v>(heap: &'v Heap, source: String, paths: Vec<NodePath>) -> Value<'v> {
+        heap.alloc(StarlarkHtmlSelection::new(source, paths))
     }
 
-    fn first_node(&self) -> Option<&scraper::ElementRef<'_>> {
-        None
+    fn parse(&self) -> Html {
+        Html::parse_document(&self.source)
     }
 
-    fn element_refs(&self) -> Vec<scraper::ElementRef<'_>> {
-        let mut out = Vec::new();
-        for &id in &self.nodes {
-            if let Some(node_ref) = self.html.tree.get(id) {
-                if let Some(el) = scraper::ElementRef::wrap(node_ref) {
-                    out.push(el);
-                }
+    /// Walk the provided document and collect the ElementRefs referenced by
+    /// this selection's paths. Paths that no longer match (e.g. because the
+    /// source changed, which it can't) are silently skipped.
+    fn resolve<'a>(&'a self, doc: &'a Html) -> Vec<ElementRef<'a>> {
+        let mut out = Vec::with_capacity(self.paths.len());
+        for path in &self.paths {
+            if let Some(el) = walk_path(doc, &path.0) {
+                out.push(el);
             }
         }
         out
     }
+}
+
+/// Starting from the document root, follow a sequence of element-child
+/// indices. At each step, the `idx`-th element child (not text/comment) is
+/// picked. Returns `None` if any index is out of range.
+fn walk_path<'a>(doc: &'a Html, path: &[usize]) -> Option<ElementRef<'a>> {
+    // The "root selection" represents the document element.
+    let mut current = doc.root_element();
+    for &idx in path {
+        let mut it = current.children().filter_map(ElementRef::wrap);
+        current = it.nth(idx)?;
+    }
+    Some(current)
+}
+
+/// Build a path to an ElementRef by walking up to the root and recording the
+/// element-sibling index at each level.
+fn path_for(doc: &Html, el: ElementRef<'_>) -> NodePath {
+    let root_id = doc.root_element().id();
+    let mut segments: Vec<usize> = Vec::new();
+    let mut node_id = el.id();
+    while node_id != root_id {
+        let node_ref = doc.tree.get(node_id).expect("valid node id");
+        let parent_ref = match node_ref.parent() {
+            Some(p) => p,
+            None => break,
+        };
+        let mut idx = 0;
+        for child in parent_ref.children() {
+            if ElementRef::wrap(child).is_none() {
+                continue;
+            }
+            if child.id() == node_id {
+                break;
+            }
+            idx += 1;
+        }
+        segments.push(idx);
+        node_id = parent_ref.id();
+    }
+    segments.reverse();
+    NodePath(segments)
+}
+
+fn parse_selector(selector: &str) -> anyhow::Result<Selector> {
+    Selector::parse(selector).map_err(|e| anyhow::anyhow!("invalid selector: {e}"))
 }
 
 #[starlark_value(type = "html.Selection")]
@@ -72,10 +119,6 @@ impl<'v> StarlarkValue<'v> for StarlarkHtmlSelection {
         static RES: MethodsStatic = MethodsStatic::new();
         RES.methods(selection_methods)
     }
-}
-
-fn parse_selector(selector: &str) -> anyhow::Result<Selector> {
-    Selector::parse(selector).map_err(|e| anyhow::anyhow!("invalid selector: {e}"))
 }
 
 #[starlark::starlark_module]
@@ -88,7 +131,8 @@ fn selection_methods(builder: &mut MethodsBuilder) {
         let sel = this
             .downcast_ref::<StarlarkHtmlSelection>()
             .ok_or_else(|| anyhow::anyhow!("expected Selection"))?;
-        for el in sel.element_refs() {
+        let doc = sel.parse();
+        for el in sel.resolve(&doc) {
             if let Some(val) = el.value().attr(name) {
                 return Ok(eval.heap().alloc(val));
             }
@@ -103,8 +147,9 @@ fn selection_methods(builder: &mut MethodsBuilder) {
         let sel = this
             .downcast_ref::<StarlarkHtmlSelection>()
             .ok_or_else(|| anyhow::anyhow!("expected Selection"))?;
+        let doc = sel.parse();
         let mut out = String::new();
-        for el in sel.element_refs() {
+        for el in sel.resolve(&doc) {
             out.push_str(&el.text().collect::<String>());
         }
         Ok(eval.heap().alloc(out.as_str()))
@@ -119,16 +164,17 @@ fn selection_methods(builder: &mut MethodsBuilder) {
             .downcast_ref::<StarlarkHtmlSelection>()
             .ok_or_else(|| anyhow::anyhow!("expected Selection"))?;
         let selector = parse_selector(selector)?;
-        let mut ids = Vec::new();
-        for el in sel.element_refs() {
+        let doc = sel.parse();
+        let mut paths = Vec::new();
+        for el in sel.resolve(&doc) {
             for matched in el.select(&selector) {
-                ids.push(matched.id());
+                paths.push(path_for(&doc, matched));
             }
         }
         Ok(StarlarkHtmlSelection::alloc_new(
             eval.heap(),
-            sel.html.clone(),
-            ids,
+            sel.source.clone(),
+            paths,
         ))
     }
 
@@ -141,17 +187,17 @@ fn selection_methods(builder: &mut MethodsBuilder) {
             .downcast_ref::<StarlarkHtmlSelection>()
             .ok_or_else(|| anyhow::anyhow!("expected Selection"))?;
         let selector = parse_selector(selector)?;
-        let mut ids = Vec::new();
-        for el in sel.element_refs() {
-            // scraper's ElementRef::select is descendants-only; use manual check on self.
+        let doc = sel.parse();
+        let mut paths = Vec::new();
+        for el in sel.resolve(&doc) {
             if selector.matches(&el) {
-                ids.push(el.id());
+                paths.push(path_for(&doc, el));
             }
         }
         Ok(StarlarkHtmlSelection::alloc_new(
             eval.heap(),
-            sel.html.clone(),
-            ids,
+            sel.source.clone(),
+            paths,
         ))
     }
 
@@ -162,18 +208,19 @@ fn selection_methods(builder: &mut MethodsBuilder) {
         let sel = this
             .downcast_ref::<StarlarkHtmlSelection>()
             .ok_or_else(|| anyhow::anyhow!("expected Selection"))?;
-        let mut ids = Vec::new();
-        for el in sel.element_refs() {
+        let doc = sel.parse();
+        let mut paths = Vec::new();
+        for el in sel.resolve(&doc) {
             for child in el.children() {
-                if let Some(ch) = scraper::ElementRef::wrap(child) {
-                    ids.push(ch.id());
+                if let Some(ch) = ElementRef::wrap(child) {
+                    paths.push(path_for(&doc, ch));
                 }
             }
         }
         Ok(StarlarkHtmlSelection::alloc_new(
             eval.heap(),
-            sel.html.clone(),
-            ids,
+            sel.source.clone(),
+            paths,
         ))
     }
 
@@ -184,18 +231,45 @@ fn selection_methods(builder: &mut MethodsBuilder) {
         let sel = this
             .downcast_ref::<StarlarkHtmlSelection>()
             .ok_or_else(|| anyhow::anyhow!("expected Selection"))?;
-        let mut ids = Vec::new();
-        for el in sel.element_refs() {
+        let doc = sel.parse();
+        let mut paths = Vec::new();
+        for el in sel.resolve(&doc) {
+            if let Some(parent) = el.parent().and_then(ElementRef::wrap) {
+                paths.push(path_for(&doc, parent));
+            }
+        }
+        Ok(StarlarkHtmlSelection::alloc_new(
+            eval.heap(),
+            sel.source.clone(),
+            paths,
+        ))
+    }
+
+    fn siblings<'v>(
+        #[starlark(this)] this: Value<'v>,
+        eval: &mut starlark::eval::Evaluator<'v, '_, '_>,
+    ) -> anyhow::Result<Value<'v>> {
+        let sel = this
+            .downcast_ref::<StarlarkHtmlSelection>()
+            .ok_or_else(|| anyhow::anyhow!("expected Selection"))?;
+        let doc = sel.parse();
+        let mut paths = Vec::new();
+        for el in sel.resolve(&doc) {
             if let Some(parent) = el.parent() {
-                if let Some(pe) = scraper::ElementRef::wrap(parent) {
-                    ids.push(pe.id());
+                for child in parent.children() {
+                    if child.id() == el.id() {
+                        continue;
+                    }
+                    if let Some(ce) = ElementRef::wrap(child) {
+                        paths.push(path_for(&doc, ce));
+                    }
                 }
             }
         }
         Ok(StarlarkHtmlSelection::alloc_new(
             eval.heap(),
-            sel.html.clone(),
-            ids,
+            sel.source.clone(),
+            paths,
         ))
     }
 
@@ -206,11 +280,11 @@ fn selection_methods(builder: &mut MethodsBuilder) {
         let sel = this
             .downcast_ref::<StarlarkHtmlSelection>()
             .ok_or_else(|| anyhow::anyhow!("expected Selection"))?;
-        let ids: Vec<NodeId> = sel.nodes.iter().take(1).copied().collect();
+        let paths = sel.paths.iter().take(1).cloned().collect();
         Ok(StarlarkHtmlSelection::alloc_new(
             eval.heap(),
-            sel.html.clone(),
-            ids,
+            sel.source.clone(),
+            paths,
         ))
     }
 
@@ -221,11 +295,11 @@ fn selection_methods(builder: &mut MethodsBuilder) {
         let sel = this
             .downcast_ref::<StarlarkHtmlSelection>()
             .ok_or_else(|| anyhow::anyhow!("expected Selection"))?;
-        let ids: Vec<NodeId> = sel.nodes.iter().last().copied().into_iter().collect();
+        let paths: Vec<NodePath> = sel.paths.last().cloned().into_iter().collect();
         Ok(StarlarkHtmlSelection::alloc_new(
             eval.heap(),
-            sel.html.clone(),
-            ids,
+            sel.source.clone(),
+            paths,
         ))
     }
 
@@ -238,25 +312,31 @@ fn selection_methods(builder: &mut MethodsBuilder) {
             .downcast_ref::<StarlarkHtmlSelection>()
             .ok_or_else(|| anyhow::anyhow!("expected Selection"))?;
         let idx = if index < 0 {
-            sel.nodes.len() as i32 + index
+            sel.paths.len() as i32 + index
         } else {
             index
-        } as usize;
-        let ids: Vec<NodeId> = sel.nodes.get(idx).copied().into_iter().collect();
+        };
+        let paths: Vec<NodePath> = if idx >= 0 {
+            sel.paths
+                .get(idx as usize)
+                .cloned()
+                .into_iter()
+                .collect()
+        } else {
+            Vec::new()
+        };
         Ok(StarlarkHtmlSelection::alloc_new(
             eval.heap(),
-            sel.html.clone(),
-            ids,
+            sel.source.clone(),
+            paths,
         ))
     }
 
-    fn len<'v>(
-        #[starlark(this)] this: Value<'v>,
-    ) -> anyhow::Result<i32> {
+    fn len<'v>(#[starlark(this)] this: Value<'v>) -> anyhow::Result<i32> {
         let sel = this
             .downcast_ref::<StarlarkHtmlSelection>()
             .ok_or_else(|| anyhow::anyhow!("expected Selection"))?;
-        Ok(sel.nodes.len() as i32)
+        Ok(sel.paths.len() as i32)
     }
 
     fn is_selector<'v>(
@@ -267,56 +347,28 @@ fn selection_methods(builder: &mut MethodsBuilder) {
             .downcast_ref::<StarlarkHtmlSelection>()
             .ok_or_else(|| anyhow::anyhow!("expected Selection"))?;
         let selector = parse_selector(selector)?;
-        for el in sel.element_refs() {
+        let doc = sel.parse();
+        for el in sel.resolve(&doc) {
             if selector.matches(&el) {
                 return Ok(true);
             }
         }
         Ok(false)
     }
-
-    fn siblings<'v>(
-        #[starlark(this)] this: Value<'v>,
-        eval: &mut starlark::eval::Evaluator<'v, '_, '_>,
-    ) -> anyhow::Result<Value<'v>> {
-        let sel = this
-            .downcast_ref::<StarlarkHtmlSelection>()
-            .ok_or_else(|| anyhow::anyhow!("expected Selection"))?;
-        let mut ids = Vec::new();
-        for el in sel.element_refs() {
-            if let Some(parent) = el.parent() {
-                for child in parent.children() {
-                    if child.id() == el.id() {
-                        continue;
-                    }
-                    if let Some(ce) = scraper::ElementRef::wrap(child) {
-                        ids.push(ce.id());
-                    }
-                }
-            }
-        }
-        Ok(StarlarkHtmlSelection::alloc_new(
-            eval.heap(),
-            sel.html.clone(),
-            ids,
-        ))
-    }
 }
 
 #[starlark::starlark_module]
 pub fn html_module(builder: &mut GlobalsBuilder) {
-    /// Parse an HTML document and return a Selection rooted at the document's
-    /// root element. Matches pixlet's `html(body=...)`.
+    /// Parse an HTML document and return a Selection rooted at the document
+    /// element. Matches pixlet's `html(body=...)`.
     fn html<'v>(
         body: &str,
         eval: &mut starlark::eval::Evaluator<'v, '_, '_>,
     ) -> anyhow::Result<Value<'v>> {
-        let doc = Html::parse_document(body);
-        let root_id = doc.tree.root().id();
         Ok(StarlarkHtmlSelection::alloc_new(
             eval.heap(),
-            std::sync::Arc::new(doc),
-            vec![root_id],
+            body.to_string(),
+            vec![NodePath::default()],
         ))
     }
 }
@@ -325,13 +377,4 @@ pub fn build_html_globals() -> starlark::environment::Globals {
     starlark::environment::GlobalsBuilder::new()
         .with(html_module)
         .build()
-}
-
-// Silence unused warnings while this module is the sole consumer of these items.
-#[allow(dead_code)]
-fn _keep() {
-    let _ = Node::Document;
-    let _ = NoneType;
-    let _: Option<&scraper::ElementRef> = None;
-    let _ = StarlarkHtmlSelection::first_node;
 }
