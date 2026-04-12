@@ -8,15 +8,37 @@ use starlark::syntax::{AstModule, Dialect};
 
 use rustlet_render::Root;
 
+use crate::execution_context::set_secret_decrypter;
 use crate::http_module::set_request_context;
 use crate::module_loader::{preprocess_starlark_source, BuiltinModuleRegistry};
 use crate::random_module::seed_for_execution;
 use crate::render_module::set_render_context;
+use crate::secret_module::SecretDecryptionKey;
 use crate::starlark_config::StarlarkConfig;
 use crate::starlark_widgets::StarlarkWidget;
 
 pub struct Applet {
     globals: Globals,
+}
+
+pub struct AppletRunOptions<'a> {
+    pub width: u32,
+    pub height: u32,
+    pub is_2x: bool,
+    pub base_dir: Option<&'a Path>,
+    pub secret_decryption_key: Option<&'a SecretDecryptionKey>,
+}
+
+impl<'a> AppletRunOptions<'a> {
+    pub fn new(width: u32, height: u32) -> Self {
+        Self {
+            width,
+            height,
+            is_2x: false,
+            base_dir: None,
+            secret_decryption_key: None,
+        }
+    }
 }
 
 impl Applet {
@@ -37,7 +59,7 @@ impl Applet {
         width: u32,
         height: u32,
     ) -> Result<Vec<Root>> {
-        self.run_with_options(id, src, config, width, height, false, None)
+        self.run_with_runtime_options(id, src, config, AppletRunOptions::new(width, height))
     }
 
     pub fn run_with_options(
@@ -50,11 +72,36 @@ impl Applet {
         is_2x: bool,
         base_dir: Option<&Path>,
     ) -> Result<Vec<Root>> {
+        self.run_with_runtime_options(
+            id,
+            src,
+            config,
+            AppletRunOptions {
+                width,
+                height,
+                is_2x,
+                base_dir,
+                secret_decryption_key: None,
+            },
+        )
+    }
+
+    pub fn run_with_runtime_options(
+        &self,
+        id: &str,
+        src: &str,
+        config: &HashMap<String, String>,
+        options: AppletRunOptions<'_>,
+    ) -> Result<Vec<Root>> {
         seed_for_execution(id);
         set_request_context(id);
-        set_render_context(is_2x);
+        set_render_context(options.is_2x);
+        set_secret_decrypter(None);
+        if let Some(secret_key) = options.secret_decryption_key {
+            set_secret_decrypter(Some(secret_key.decrypter_for_app(id)?));
+        }
 
-        let registry = BuiltinModuleRegistry::new(width, height, is_2x)?;
+        let registry = BuiltinModuleRegistry::new(options.width, options.height, options.is_2x)?;
 
         let ast = AstModule::parse(
             id,
@@ -64,7 +111,7 @@ impl Applet {
         .map_err(|e| anyhow!("{e}"))?;
 
         let module = Module::new();
-        let loader = registry.loader(&self.globals, base_dir);
+        let loader = registry.loader(&self.globals, options.base_dir);
 
         let mut eval = Evaluator::new(&module);
         eval.set_loader(&loader);
@@ -139,10 +186,52 @@ mod tests {
     use std::sync::LazyLock;
     use std::sync::{Arc, Mutex};
     use std::thread;
+    use tink_core::Aead;
 
     use crate::cache_module::{init_cache, InMemoryCache};
+    use crate::secret_module::{SecretDecryptionKey, SecretEncryptionKey};
 
     static CACHE_TEST_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
+    #[derive(Clone)]
+    struct DummyAead;
+
+    impl Aead for DummyAead {
+        fn encrypt(
+            &self,
+            plaintext: &[u8],
+            _additional_data: &[u8],
+        ) -> Result<Vec<u8>, tink_core::TinkError> {
+            Ok(plaintext.to_vec())
+        }
+
+        fn decrypt(
+            &self,
+            ciphertext: &[u8],
+            _additional_data: &[u8],
+        ) -> Result<Vec<u8>, tink_core::TinkError> {
+            Ok(ciphertext.to_vec())
+        }
+    }
+
+    fn make_secret_keys() -> (SecretDecryptionKey, SecretEncryptionKey) {
+        tink_hybrid::init();
+        let handle = tink_core::keyset::Handle::new(
+            &tink_hybrid::ecies_hkdf_aes128_ctr_hmac_sha256_key_template(),
+        )
+        .unwrap();
+
+        let mut encrypted_keyset_json = Vec::new();
+        let mut writer = tink_core::keyset::JsonWriter::new(&mut encrypted_keyset_json);
+        handle.write(&mut writer, Box::new(DummyAead)).unwrap();
+
+        let decryption_key = SecretDecryptionKey::from_private_keyset_json(
+            encrypted_keyset_json,
+            Box::new(DummyAead),
+        );
+        let encryption_key = decryption_key.to_public_key().unwrap();
+        (decryption_key, encryption_key)
+    }
 
     fn read_http_request(stream: &mut std::net::TcpStream) -> String {
         let mut buf = Vec::new();
@@ -1528,5 +1617,73 @@ def main(config):
         assert!(requests[2].starts_with("POST /json HTTP/1.1"));
         let req2 = requests[2].to_ascii_lowercase();
         assert!(req2.contains("content-type: application/json"));
+    }
+
+    #[test]
+    fn pixlet_secret_module_decrypts_for_matching_app() {
+        let (decryption_key, encryption_key) = make_secret_keys();
+        let plaintext = "h4x0rrszZ!!";
+        let encrypted = encryption_key.encrypt("testid", plaintext).unwrap();
+
+        let src = format!(
+            concat!(
+                "load(\"render.star\", \"render\")\n",
+                "load(\"secret.star\", \"secret\")\n",
+                "load(\"assert.star\", \"assert\")\n",
+                "\n",
+                "EXPECTED_PLAINTEXT = {:?}\n",
+                "ENCRYPTED = {:?}\n",
+                "DECRYPTED = secret.decrypt(ENCRYPTED)\n",
+                "\n",
+                "def main(config):\n",
+                "    assert.eq(DECRYPTED, EXPECTED_PLAINTEXT)\n",
+                "    return render.Root(child = render.Box())\n",
+            ),
+            plaintext, encrypted
+        );
+
+        let applet = Applet::new();
+        let roots = applet
+            .run_with_runtime_options(
+                "testid",
+                &src,
+                &HashMap::new(),
+                AppletRunOptions {
+                    width: 64,
+                    height: 32,
+                    is_2x: false,
+                    base_dir: None,
+                    secret_decryption_key: Some(&decryption_key),
+                },
+            )
+            .unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn pixlet_secret_module_returns_none_without_key() {
+        let (_decryption_key, encryption_key) = make_secret_keys();
+        let encrypted = encryption_key.encrypt("test.star", "h4x0rrszZ!!").unwrap();
+
+        let src = format!(
+            concat!(
+                "load(\"render.star\", \"render\")\n",
+                "load(\"secret.star\", \"secret\")\n",
+                "load(\"assert.star\", \"assert\")\n",
+                "\n",
+                "ENCRYPTED = {:?}\n",
+                "\n",
+                "def main(config):\n",
+                "    assert.eq(secret.decrypt(ENCRYPTED), None)\n",
+                "    return render.Root(child = render.Box())\n",
+            ),
+            encrypted
+        );
+
+        let applet = Applet::new();
+        let roots = applet
+            .run("test.star", &src, &HashMap::new(), 64, 32)
+            .unwrap();
+        assert_eq!(roots.len(), 1);
     }
 }

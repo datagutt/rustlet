@@ -17,6 +17,7 @@ mod random_module;
 mod re_module;
 mod render_module;
 mod schema_module;
+mod secret_module;
 mod starlark_bytes;
 mod starlark_canvas;
 mod starlark_color;
@@ -32,5 +33,6 @@ mod time_module;
 mod xpath_module;
 mod zipfile_module;
 
-pub use applet::Applet;
+pub use applet::{Applet, AppletRunOptions};
 pub use cache_module::{init_cache, InMemoryCache};
+pub use secret_module::{SecretDecryptionKey, SecretEncryptionKey};

@@ -28,6 +28,7 @@ use crate::random_module::build_random_globals;
 use crate::re_module::build_re_globals;
 use crate::render_module::build_render_globals;
 use crate::schema_module::build_schema_globals;
+use crate::secret_module::build_secret_globals;
 use crate::starlark_canvas::StarlarkCanvas;
 use crate::starlark_file::StarlarkFile;
 use crate::strings_module::build_strings_globals;
@@ -63,6 +64,10 @@ impl BuiltinModuleRegistry {
         modules.insert(
             "cache.star".to_string(),
             build_simple_frozen_module("cache", build_cache_globals())?,
+        );
+        modules.insert(
+            "secret.star".to_string(),
+            build_simple_frozen_module("secret", build_secret_globals())?,
         );
         modules.insert(
             "assert.star".to_string(),
