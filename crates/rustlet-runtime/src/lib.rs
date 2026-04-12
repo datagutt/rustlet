@@ -1,5 +1,6 @@
 mod animation_module;
 mod applet;
+mod filter_module;
 mod assert_module;
 mod base64_module;
 mod bsoup_module;

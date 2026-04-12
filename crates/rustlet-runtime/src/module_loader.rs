@@ -13,6 +13,7 @@ use starlark::values::structs::AllocStruct;
 use starlark::values::Value;
 
 use crate::animation_module::build_animation_globals;
+use crate::filter_module::build_filter_globals;
 use crate::assert_module::build_assert_globals;
 use crate::base64_module::build_base64_globals;
 use crate::bsoup_module::build_bsoup_globals;
@@ -151,6 +152,10 @@ impl BuiltinModuleRegistry {
         modules.insert(
             "animation.star".to_string(),
             build_simple_frozen_module("animation", build_animation_globals())?,
+        );
+        modules.insert(
+            "filter.star".to_string(),
+            build_simple_frozen_module("filter", build_filter_globals())?,
         );
         Ok(Self { modules })
     }

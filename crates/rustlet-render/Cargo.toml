@@ -7,6 +7,7 @@ edition = "2021"
 tiny-skia = "0.11"
 resvg = "0.45"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif"] }
+imageproc = { version = "0.25", default-features = false }
 color-name = "1"
 anyhow = "1"
 unicode-bidi = "0.3"

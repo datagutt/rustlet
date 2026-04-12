@@ -8,6 +8,14 @@ pub use render::anim::{
     Transformation,
 };
 pub use render::animation::Animation;
+pub use render::filter::{
+    Blur as FilterBlur, Brightness as FilterBrightness, Contrast as FilterContrast,
+    EdgeDetection as FilterEdgeDetection, Emboss as FilterEmboss,
+    FlipHorizontal as FilterFlipHorizontal, FlipVertical as FilterFlipVertical,
+    Gamma as FilterGamma, Grayscale as FilterGrayscale, Hue as FilterHue, Invert as FilterInvert,
+    Rotate as FilterRotate, Saturation as FilterSaturation, Sepia as FilterSepia,
+    Shear as FilterShear, Sharpen as FilterSharpen, Threshold as FilterThreshold,
+};
 pub use render::arc::Arc;
 pub use render::box_widget::BoxWidget;
 pub use render::circle::Circle;
