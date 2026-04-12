@@ -1,0 +1,73 @@
+{
+  "cases": [
+    {
+      "id": "box_text_fixture",
+      "kind": "fixture",
+      "path": "fixtures/box_text.star",
+      "output_format": "webp",
+      "policy": "exact"
+    },
+    {
+      "id": "wrapped_text_fixture",
+      "kind": "fixture",
+      "path": "fixtures/wrapped_text.star",
+      "output_format": "webp",
+      "policy": "exact"
+    },
+    {
+      "id": "image_png_fixture",
+      "kind": "fixture",
+      "path": "fixtures/image_png.star",
+      "output_format": "webp",
+      "policy": "exact"
+    },
+    {
+      "id": "image_gif_fixture",
+      "kind": "fixture",
+      "path": "fixtures/image_gif.star",
+      "output_format": "gif",
+      "max_frames": 4,
+      "policy": "exact"
+    },
+    {
+      "id": "row_column_fixture",
+      "kind": "fixture",
+      "path": "fixtures/row_column.star",
+      "output_format": "webp",
+      "policy": "exact"
+    },
+    {
+      "id": "double_text_fixture",
+      "kind": "fixture",
+      "path": "fixtures/double_text.star",
+      "double": true,
+      "output_format": "webp",
+      "policy": "exact"
+    },
+    {
+      "id": "canvas_fake_events_app",
+      "kind": "reference_app",
+      "path": ".reference/apps/apps/canvas",
+      "output_format": "webp",
+      "policy": "exact"
+    },
+    {
+      "id": "aquarium_app",
+      "kind": "reference_app",
+      "path": ".reference/apps/apps/aquarium",
+      "output_format": "gif",
+      "max_frames": 16,
+      "policy": "known_diff",
+      "reason": "randomized image-heavy animation; useful for oracle coverage without gating default CI"
+    },
+    {
+      "id": "analog_clock_live_app",
+      "kind": "reference_app",
+      "path": ".reference/apps/apps/analogclock",
+      "output_format": "webp",
+      "policy": "known_diff",
+      "requires_live_data": true,
+      "reason": "depends on current time and can drift across engines near minute boundaries"
+    }
+  ]
+}

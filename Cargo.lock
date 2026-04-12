@@ -1401,6 +1401,7 @@ dependencies = [
  "byteorder-lite",
  "color_quant",
  "gif 0.14.1",
+ "image-webp",
  "moxcms",
  "num-traits",
  "png 0.18.1",
@@ -2556,6 +2557,21 @@ dependencies = [
  "rustlet-encode",
  "rustlet-render",
  "rustlet-runtime",
+]
+
+[[package]]
+name = "rustlet-compat"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "image",
+ "rustlet-encode",
+ "rustlet-runtime",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tiny-skia",
 ]
 
 [[package]]
