@@ -63,6 +63,38 @@ pub fn time_module(builder: &mut GlobalsBuilder) {
     fn is_valid_timezone(name: &str) -> anyhow::Result<bool> {
         Ok(crate::starlark_time::is_known_timezone(name))
     }
+
+    /// `time.time(year?, month?, day?, ...)` matches starlark.net/lib/time's
+    /// constructor: all fields default to zero, location defaults to UTC, and
+    /// only keyword arguments are accepted.
+    #[allow(non_snake_case)]
+    fn time<'v>(
+        #[starlark(default = 0)] year: i32,
+        #[starlark(default = 0)] month: i32,
+        #[starlark(default = 0)] day: i32,
+        #[starlark(default = 0)] hour: i32,
+        #[starlark(default = 0)] minute: i32,
+        #[starlark(default = 0)] second: i32,
+        #[starlark(default = 0)] nanosecond: i32,
+        #[starlark(default = "UTC")] location: &str,
+        eval: &mut Evaluator<'v, '_, '_>,
+    ) -> anyhow::Result<Value<'v>> {
+        let ts = datetime_to_unix(
+            year as i64,
+            month as i64,
+            day as i64,
+            hour as i64,
+            minute as i64,
+            second as i64,
+        );
+        let time = StarlarkTime::from_unix(ts, nanosecond as i64);
+        let time = if location.is_empty() || location == "UTC" {
+            time
+        } else {
+            time.with_location(location)?
+        };
+        Ok(eval.heap().alloc(time))
+    }
 }
 
 fn detect_system_timezone() -> String {

@@ -56,10 +56,7 @@ impl BuiltinModuleRegistry {
             "render.star".to_string(),
             build_render_frozen_module(width, height, is_2x)?,
         );
-        modules.insert(
-            "time.star".to_string(),
-            build_simple_frozen_module("time", build_time_globals())?,
-        );
+        modules.insert("time.star".to_string(), build_time_frozen_module()?);
         modules.insert(
             "encoding/base64.star".to_string(),
             build_simple_frozen_module("base64", build_base64_globals())?,
@@ -506,6 +503,50 @@ fn build_simple_frozen_module(
     module
         .freeze()
         .map_err(|e| anyhow!("failed to freeze {name} module: {e:?}"))
+}
+
+fn build_time_frozen_module() -> Result<FrozenModule> {
+    use crate::starlark_duration::StarlarkDuration;
+
+    let time_globals = build_time_globals();
+
+    let module = Module::new();
+    let heap = module.heap();
+
+    let mut entries: Vec<(&str, starlark::values::Value)> = time_globals
+        .iter()
+        .map(|(name, val)| (name, val.to_value()))
+        .collect();
+
+    // Duration constants match starlark.net/lib/time.
+    entries.push(("nanosecond", heap.alloc(StarlarkDuration::from_nanos(1))));
+    entries.push((
+        "microsecond",
+        heap.alloc(StarlarkDuration::from_nanos(1_000)),
+    ));
+    entries.push((
+        "millisecond",
+        heap.alloc(StarlarkDuration::from_nanos(1_000_000)),
+    ));
+    entries.push((
+        "second",
+        heap.alloc(StarlarkDuration::from_nanos(1_000_000_000)),
+    ));
+    entries.push((
+        "minute",
+        heap.alloc(StarlarkDuration::from_nanos(60 * 1_000_000_000)),
+    ));
+    entries.push((
+        "hour",
+        heap.alloc(StarlarkDuration::from_nanos(3600 * 1_000_000_000)),
+    ));
+
+    let struct_val = heap.alloc(AllocStruct(entries));
+    module.set("time", struct_val);
+
+    module
+        .freeze()
+        .map_err(|e| anyhow!("failed to freeze time module: {e:?}"))
 }
 
 fn build_math_frozen_module() -> Result<FrozenModule> {
