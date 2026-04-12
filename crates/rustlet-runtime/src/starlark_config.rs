@@ -4,6 +4,7 @@ use std::fmt;
 use allocative::Allocative;
 use starlark::environment::{Methods, MethodsBuilder, MethodsStatic};
 use starlark::starlark_simple_value;
+use starlark::values::none::NoneType;
 use starlark::values::{Heap, NoSerialize, ProvidesStaticType, StarlarkValue, Value, ValueLike};
 use starlark_derive::starlark_value;
 
@@ -62,7 +63,7 @@ fn config_methods(builder: &mut MethodsBuilder) {
     fn str<'v>(
         #[starlark(this)] this: Value<'v>,
         key: &str,
-        #[starlark(default = "")] default: &str,
+        #[starlark(default = NoneType)] default: Value<'v>,
         eval: &mut starlark::eval::Evaluator<'v, '_, '_>,
     ) -> anyhow::Result<Value<'v>> {
         let cfg = this
@@ -70,20 +71,20 @@ fn config_methods(builder: &mut MethodsBuilder) {
             .ok_or_else(|| anyhow::anyhow!("expected config"))?;
         match cfg.entries.get(key) {
             Some(v) => Ok(eval.heap().alloc(v.as_str())),
-            None => Ok(eval.heap().alloc(default)),
+            None => Ok(default),
         }
     }
 
     fn bool<'v>(
         #[starlark(this)] this: Value<'v>,
         key: &str,
-        #[starlark(default = false)] default: bool,
-    ) -> anyhow::Result<bool> {
+        #[starlark(default = NoneType)] default: Value<'v>,
+    ) -> anyhow::Result<Value<'v>> {
         let cfg = this
             .downcast_ref::<StarlarkConfig>()
             .ok_or_else(|| anyhow::anyhow!("expected config"))?;
         match cfg.entries.get(key) {
-            Some(v) => Ok(v == "true" || v == "True" || v == "1"),
+            Some(v) => Ok(Value::new_bool(v == "true" || v == "True" || v == "1")),
             None => Ok(default),
         }
     }

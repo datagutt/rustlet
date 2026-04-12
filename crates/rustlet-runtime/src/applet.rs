@@ -1849,4 +1849,40 @@ def main(config):
         let roots = applet.run("test.star", src, &HashMap::new(), 64, 32).unwrap();
         assert_eq!(roots.len(), 1);
     }
+
+    #[test]
+    fn pixlet_config_str_accepts_none_default() {
+        let src = concat!(
+            "load(\"assert.star\", \"assert\")\n",
+            "load(\"render.star\", \"render\")\n",
+            "\n",
+            "def main(config):\n",
+            "    assert.eq(config.str(\"missing\"), None)\n",
+            "    assert.eq(config.str(\"missing\", None), None)\n",
+            "    assert.eq(config.str(\"missing\", \"fallback\"), \"fallback\")\n",
+            "    return render.Root(child = render.Box())\n",
+        );
+
+        let applet = Applet::new();
+        let roots = applet.run("test.star", src, &HashMap::new(), 64, 32).unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn pixlet_config_bool_accepts_none_default() {
+        let src = concat!(
+            "load(\"assert.star\", \"assert\")\n",
+            "load(\"render.star\", \"render\")\n",
+            "\n",
+            "def main(config):\n",
+            "    assert.eq(config.bool(\"missing\"), None)\n",
+            "    assert.eq(config.bool(\"missing\", None), None)\n",
+            "    assert.eq(config.bool(\"missing\", True), True)\n",
+            "    return render.Root(child = render.Box())\n",
+        );
+
+        let applet = Applet::new();
+        let roots = applet.run("test.star", src, &HashMap::new(), 64, 32).unwrap();
+        assert_eq!(roots.len(), 1);
+    }
 }
