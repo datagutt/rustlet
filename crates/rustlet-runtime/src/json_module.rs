@@ -1,8 +1,11 @@
 use starlark::environment::GlobalsBuilder;
 use starlark::eval::Evaluator;
 use starlark::values::dict::{AllocDict, DictRef};
+use starlark::values::float::StarlarkFloat;
 use starlark::values::list::ListRef;
-use starlark::values::{Heap, Value};
+use starlark::values::structs::StructRef;
+use starlark::values::tuple::TupleRef;
+use starlark::values::{Heap, Value, ValueLike};
 
 #[starlark::starlark_module]
 pub fn json_module(builder: &mut GlobalsBuilder) {
@@ -41,12 +44,25 @@ pub(crate) fn starlark_to_serde(value: Value) -> anyhow::Result<serde_json::Valu
         return Ok(serde_json::Value::Number(i.into()));
     }
 
+    if let Some(f) = value.downcast_ref::<StarlarkFloat>() {
+        if let Some(n) = serde_json::Number::from_f64(f.0) {
+            return Ok(serde_json::Value::Number(n));
+        }
+        return Ok(serde_json::Value::Null);
+    }
+
     if let Some(s) = value.unpack_str() {
         return Ok(serde_json::Value::String(s.to_string()));
     }
 
     if let Some(list) = ListRef::from_value(value) {
         let arr: Result<Vec<serde_json::Value>, _> = list.iter().map(starlark_to_serde).collect();
+        return Ok(serde_json::Value::Array(arr?));
+    }
+
+    if let Some(tuple) = TupleRef::from_value(value) {
+        let arr: Result<Vec<serde_json::Value>, _> =
+            tuple.iter().map(starlark_to_serde).collect();
         return Ok(serde_json::Value::Array(arr?));
     }
 
@@ -57,6 +73,14 @@ pub(crate) fn starlark_to_serde(value: Value) -> anyhow::Result<serde_json::Valu
                 .unpack_str()
                 .ok_or_else(|| anyhow::anyhow!("JSON dict keys must be strings"))?;
             map.insert(key.to_string(), starlark_to_serde(v)?);
+        }
+        return Ok(serde_json::Value::Object(map));
+    }
+
+    if let Some(st) = StructRef::from_value(value) {
+        let mut map = serde_json::Map::new();
+        for (k, v) in st.iter() {
+            map.insert(k.as_str().to_string(), starlark_to_serde(v)?);
         }
         return Ok(serde_json::Value::Object(map));
     }

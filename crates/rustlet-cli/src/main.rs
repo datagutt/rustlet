@@ -16,6 +16,20 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Show the version of Rustlet
+    Version,
+
+    /// Print the configuration schema for a Rustlet app
+    Schema {
+        /// Path to the .star file or app directory
+        #[arg(default_value = ".")]
+        path: PathBuf,
+
+        /// Output path for schema JSON (defaults to stdout)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+
     /// Render a .star file to an image
     Render {
         /// Path to the .star file
@@ -65,6 +79,41 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
+        Commands::Version => {
+            println!("Rustlet version: {}", env!("CARGO_PKG_VERSION"));
+        }
+        Commands::Schema { path, output } => {
+            let (src, base_dir, id) = if path.is_dir() {
+                let main = path.join("main.star");
+                let src = std::fs::read_to_string(&main)?;
+                let id = path
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("app")
+                    .to_string();
+                (src, Some(path.clone()), id)
+            } else {
+                let src = std::fs::read_to_string(&path)?;
+                let id = path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("app")
+                    .to_string();
+                (src, path.parent().map(|p| p.to_path_buf()), id)
+            };
+
+            let applet = Applet::new();
+            let schema_json = applet.schema_json(&id, &src, base_dir.as_deref())?;
+
+            match output {
+                Some(path) if path.as_os_str() != "-" => {
+                    std::fs::write(&path, schema_json.as_bytes())?;
+                }
+                _ => {
+                    println!("{}", schema_json);
+                }
+            }
+        }
         Commands::Render {
             file,
             output,

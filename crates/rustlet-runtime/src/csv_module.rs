@@ -2,14 +2,13 @@ use starlark::environment::GlobalsBuilder;
 use starlark::eval::Evaluator;
 use starlark::values::list::ListRef;
 use starlark::values::Value;
-use starlark::values::ValueLike;
 
 #[starlark::starlark_module]
 pub fn csv_module(builder: &mut GlobalsBuilder) {
     fn read_all<'v>(
         s: &str,
-        #[starlark(default = ',')] comma: char,
-        #[starlark(default = '\0')] comment: char,
+        #[starlark(default = ",")] comma: &str,
+        #[starlark(default = "")] comment: &str,
         #[starlark(default = false)] lazy_quotes: bool,
         #[starlark(default = false)] trim_leading_space: bool,
         #[starlark(default = 0)] fields_per_record: i32,
@@ -21,16 +20,14 @@ pub fn csv_module(builder: &mut GlobalsBuilder) {
         }
 
         let mut builder = ::csv::ReaderBuilder::new();
+        // Pixlet trims only leading whitespace; rust's csv `Trim::Fields` trims both sides,
+        // so we keep the reader as `Trim::None` and post-process fields below.
         builder
             .has_headers(false)
             .delimiter(csv_delimiter(comma, "comma")?)
             .flexible(lazy_quotes || fields_per_record <= 0)
-            .trim(if trim_leading_space {
-                ::csv::Trim::Fields
-            } else {
-                ::csv::Trim::None
-            });
-        if comment != '\0' {
+            .trim(::csv::Trim::None);
+        if !comment.is_empty() {
             builder.comment(Some(csv_delimiter(comment, "comment")?));
         }
 
@@ -51,7 +48,14 @@ pub fn csv_module(builder: &mut GlobalsBuilder) {
             rows.push(
                 record
                     .iter()
-                    .map(|field| eval.heap().alloc(field))
+                    .map(|field| {
+                        let f = if trim_leading_space {
+                            field.trim_start()
+                        } else {
+                            field
+                        };
+                        eval.heap().alloc(f)
+                    })
                     .collect::<Vec<_>>(),
             );
         }
@@ -59,7 +63,7 @@ pub fn csv_module(builder: &mut GlobalsBuilder) {
         Ok(eval.heap().alloc(rows))
     }
 
-    fn write_all(rows: Value, #[starlark(default = ',')] comma: char) -> anyhow::Result<String> {
+    fn write_all(rows: Value, #[starlark(default = ",")] comma: &str) -> anyhow::Result<String> {
         let rows = ListRef::from_value(rows)
             .ok_or_else(|| anyhow::anyhow!("csv.write_all expects a list of rows"))?;
         let mut writer = ::csv::WriterBuilder::new()
@@ -95,9 +99,18 @@ pub fn build_csv_globals() -> starlark::environment::Globals {
         .build()
 }
 
-fn csv_delimiter(value: char, name: &str) -> anyhow::Result<u8> {
-    if !value.is_ascii() || value == '\n' || value == '\r' {
-        return Err(anyhow::anyhow!("{name} must be a single-byte non-newline character"));
+fn csv_delimiter(value: &str, name: &str) -> anyhow::Result<u8> {
+    let bytes = value.as_bytes();
+    if bytes.len() != 1 {
+        return Err(anyhow::anyhow!(
+            "{name} must be a single-byte character"
+        ));
     }
-    Ok(value as u8)
+    let byte = bytes[0];
+    if byte == b'\n' || byte == b'\r' {
+        return Err(anyhow::anyhow!(
+            "{name} must be a non-newline character"
+        ));
+    }
+    Ok(byte)
 }

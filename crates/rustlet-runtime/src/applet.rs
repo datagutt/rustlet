@@ -5,6 +5,7 @@ use anyhow::{anyhow, Result};
 use starlark::environment::{Globals, GlobalsBuilder, LibraryExtension, Module};
 use starlark::eval::Evaluator;
 use starlark::syntax::{AstModule, Dialect};
+use starlark::values::ValueLike;
 
 use rustlet_render::Root;
 
@@ -13,6 +14,7 @@ use crate::http_module::set_request_context;
 use crate::module_loader::{preprocess_starlark_source, BuiltinModuleRegistry};
 use crate::random_module::seed_for_execution;
 use crate::render_module::set_render_context;
+use crate::schema_module::StarlarkSchemaSchema;
 use crate::secret_module::SecretDecryptionKey;
 use crate::starlark_config::StarlarkConfig;
 use crate::starlark_widgets::StarlarkWidget;
@@ -132,6 +134,47 @@ impl Applet {
             .map_err(|e| anyhow!("{e}"))?;
 
         extract_roots(result)
+    }
+
+    /// Evaluate the applet's `get_schema()` and return its JSON schema, matching
+    /// Pixlet's `pixlet schema` output.
+    pub fn schema_json(&self, id: &str, src: &str, base_dir: Option<&Path>) -> Result<String> {
+        seed_for_execution(id);
+        set_request_context(id);
+        set_render_context(false);
+        set_secret_decrypter(None);
+
+        let registry = BuiltinModuleRegistry::new(64, 32, false)?;
+
+        let ast = AstModule::parse(
+            id,
+            preprocess_starlark_source(src),
+            &Dialect::AllOptionsInternal,
+        )
+        .map_err(|e| anyhow!("{e}"))?;
+
+        let module = Module::new();
+        let loader = registry.loader(&self.globals, base_dir);
+
+        let mut eval = Evaluator::new(&module);
+        eval.set_loader(&loader);
+        eval.eval_module(ast, &self.globals)
+            .map_err(|e| anyhow!("{e}"))?;
+
+        let get_schema = module
+            .get("get_schema")
+            .ok_or_else(|| anyhow!("script does not define a `get_schema` function"))?;
+
+        let result = eval
+            .eval_function(get_schema, &[], &[])
+            .map_err(|e| anyhow!("{e}"))?;
+
+        let schema = result
+            .downcast_ref::<StarlarkSchemaSchema>()
+            .ok_or_else(|| anyhow!("get_schema() must return a Schema, got {}", result.get_type()))?;
+
+        let json = schema.to_json();
+        serde_json::to_string_pretty(&json).map_err(|e| anyhow!("JSON encode error: {e}"))
     }
 }
 
