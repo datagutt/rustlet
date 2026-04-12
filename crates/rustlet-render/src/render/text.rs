@@ -105,7 +105,10 @@ impl Text {
         let dst_w = pixmap.width() as usize;
         let dst_h = pixmap.height() as usize;
 
-        let text_top = (text_h - font_h).max(0);
+        // Pixlet positions text relative to a baseline and lets glyphs clip when the
+        // requested line height is smaller than the font's native height. Do not clamp
+        // this origin to zero, or short explicit heights render too low.
+        let text_top = text_h - font_h;
 
         let mut cursor_x: i32 = 0;
         for segment in segments {
@@ -126,7 +129,7 @@ impl Text {
                 TextSegment::Emoji(emoji) => {
                     let (emoji_w, emoji_h) = emoji_atlas::exact_size(&emoji)
                         .expect("segmented emoji must exist in atlas");
-                    let emoji_top = (text_h - emoji_h).max(0);
+                    let emoji_top = text_h - emoji_h;
                     let widget =
                         Emoji::new(&emoji, emoji_w, emoji_h).expect("inline emoji render failed");
                     widget.paint(
