@@ -34,39 +34,69 @@ fn with_unpremultiplied(px: &mut [u8; 4], f: impl FnOnce(u8, u8, u8) -> (u8, u8,
     px[2] = (b as f32 * af).round() as u8;
 }
 
-fn rgb_to_hsv(r: f32, g: f32, b: f32) -> (f32, f32, f32) {
-    let max = r.max(g.max(b));
-    let min = r.min(g.min(b));
-    let delta = max - min;
-    let v = max;
-    let s = if max == 0.0 { 0.0 } else { delta / max };
-    let h = if delta == 0.0 {
-        0.0
-    } else if max == r {
-        60.0 * (((g - b) / delta) % 6.0)
-    } else if max == g {
-        60.0 * (((b - r) / delta) + 2.0)
+/// Convert straight RGB (0..=255) to HSL with h in degrees (0..360), s/l in [0, 1].
+/// Matches bild's `util.RGBToHSL`, which is the color model pixlet's hue/saturation
+/// filters use.
+fn rgb_to_hsl(r: f32, g: f32, b: f32) -> (f32, f32, f32) {
+    let rn = r / 255.0;
+    let gn = g / 255.0;
+    let bn = b / 255.0;
+    let max = rn.max(gn.max(bn));
+    let min = rn.min(gn.min(bn));
+    let l = (max + min) / 2.0;
+    if (max - min).abs() < f32::EPSILON {
+        return (0.0, 0.0, l);
+    }
+    let d = max - min;
+    let s = if l > 0.5 {
+        d / (2.0 - max - min)
     } else {
-        60.0 * (((r - g) / delta) + 4.0)
+        d / (max + min)
     };
-    let h = if h < 0.0 { h + 360.0 } else { h };
-    (h, s, v)
+    let h = if max == rn {
+        60.0 * (((gn - bn) / d) + if gn < bn { 6.0 } else { 0.0 })
+    } else if max == gn {
+        60.0 * (((bn - rn) / d) + 2.0)
+    } else {
+        60.0 * (((rn - gn) / d) + 4.0)
+    };
+    (h, s, l)
 }
 
-fn hsv_to_rgb(h: f32, s: f32, v: f32) -> (f32, f32, f32) {
-    let c = v * s;
-    let h_prime = (h.rem_euclid(360.0)) / 60.0;
-    let x = c * (1.0 - (h_prime.rem_euclid(2.0) - 1.0).abs());
-    let (r1, g1, b1) = match h_prime as i32 {
-        0 => (c, x, 0.0),
-        1 => (x, c, 0.0),
-        2 => (0.0, c, x),
-        3 => (0.0, x, c),
-        4 => (x, 0.0, c),
-        _ => (c, 0.0, x),
+fn hue_to_rgb(p: f32, q: f32, mut t: f32) -> f32 {
+    if t < 0.0 {
+        t += 1.0;
+    }
+    if t > 1.0 {
+        t -= 1.0;
+    }
+    if t < 1.0 / 6.0 {
+        return p + (q - p) * 6.0 * t;
+    }
+    if t < 0.5 {
+        return q;
+    }
+    if t < 2.0 / 3.0 {
+        return p + (q - p) * (2.0 / 3.0 - t) * 6.0;
+    }
+    p
+}
+
+fn hsl_to_rgb(h: f32, s: f32, l: f32) -> (f32, f32, f32) {
+    if s < f32::EPSILON {
+        return (l * 255.0, l * 255.0, l * 255.0);
+    }
+    let q = if l < 0.5 {
+        l * (1.0 + s)
+    } else {
+        l + s - l * s
     };
-    let m = v - c;
-    (r1 + m, g1 + m, b1 + m)
+    let p = 2.0 * l - q;
+    let hn = (h / 360.0).rem_euclid(1.0);
+    let r = hue_to_rgb(p, q, hn + 1.0 / 3.0);
+    let g = hue_to_rgb(p, q, hn);
+    let b = hue_to_rgb(p, q, hn - 1.0 / 3.0);
+    (r * 255.0, g * 255.0, b * 255.0)
 }
 
 // ---------- Brightness ----------
@@ -87,13 +117,11 @@ impl Widget for Brightness {
         let Some((mut src, cb)) = render_child_to_pixmap(&*self.child, bounds, frame_idx) else {
             return;
         };
-        let change = self.change.clamp(-1.0, 1.0) as f32;
+        // bild's Brightness is multiplicative: `c * (1 + change)`. `change` in [-1, 1].
+        let factor = 1.0 + self.change.clamp(-1.0, 1.0) as f32;
         for_each_pixel(&mut src, |px| {
             with_unpremultiplied(px, |r, g, b| {
-                let adjust = |c: u8| {
-                    let v = c as f32 / 255.0;
-                    ((v + change).clamp(0.0, 1.0) * 255.0).round() as u8
-                };
+                let adjust = |c: u8| ((c as f32 * factor).clamp(0.0, 255.0)).round() as u8;
                 (adjust(r), adjust(g), adjust(b))
             });
         });
@@ -119,12 +147,15 @@ impl Widget for Contrast {
         let Some((mut src, cb)) = render_child_to_pixmap(&*self.child, bounds, frame_idx) else {
             return;
         };
-        let factor = (259.0 * ((self.change as f32).clamp(-1.0, 1.0) * 255.0 + 255.0))
-            / (255.0 * (259.0 - ((self.change as f32).clamp(-1.0, 1.0) * 255.0 + 255.0).abs()).max(0.01));
+        // bild formula: `((c/255 - 0.5) * (1 + change) + 0.5) * 255`.
+        let change = self.change.clamp(-1.0, 1.0) as f32;
         for_each_pixel(&mut src, |px| {
             with_unpremultiplied(px, |r, g, b| {
                 let adj = |c: u8| {
-                    ((factor * (c as f32 - 128.0) + 128.0).clamp(0.0, 255.0)).round() as u8
+                    let v = c as f32 / 255.0;
+                    (((v - 0.5) * (1.0 + change) + 0.5) * 255.0)
+                        .clamp(0.0, 255.0)
+                        .round() as u8
                 };
                 (adj(r), adj(g), adj(b))
             });
@@ -236,16 +267,17 @@ impl Widget for Hue {
         let Some((mut src, cb)) = render_child_to_pixmap(&*self.child, bounds, frame_idx) else {
             return;
         };
-        let delta = self.change as f32;
+        // bild's Hue takes integer degrees and rotates via HSL.
+        let delta = self.change as i32 as f32;
         for_each_pixel(&mut src, |px| {
             with_unpremultiplied(px, |r, g, b| {
-                let (h, s, v) = rgb_to_hsv(r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0);
+                let (h, s, l) = rgb_to_hsl(r as f32, g as f32, b as f32);
                 let new_h = (h + delta).rem_euclid(360.0);
-                let (r2, g2, b2) = hsv_to_rgb(new_h, s, v);
+                let (r2, g2, b2) = hsl_to_rgb(new_h, s, l);
                 (
-                    (r2 * 255.0).clamp(0.0, 255.0) as u8,
-                    (g2 * 255.0).clamp(0.0, 255.0) as u8,
-                    (b2 * 255.0).clamp(0.0, 255.0) as u8,
+                    r2.clamp(0.0, 255.0) as u8,
+                    g2.clamp(0.0, 255.0) as u8,
+                    b2.clamp(0.0, 255.0) as u8,
                 )
             });
         });
@@ -271,16 +303,17 @@ impl Widget for Saturation {
         let Some((mut src, cb)) = render_child_to_pixmap(&*self.child, bounds, frame_idx) else {
             return;
         };
+        // bild's Saturation is multiplicative via HSL: `s * (1 + change)`.
         let adj = self.change as f32;
         for_each_pixel(&mut src, |px| {
             with_unpremultiplied(px, |r, g, b| {
-                let (h, s, v) = rgb_to_hsv(r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0);
-                let new_s = (s + adj).clamp(0.0, 1.0);
-                let (r2, g2, b2) = hsv_to_rgb(h, new_s, v);
+                let (h, s, l) = rgb_to_hsl(r as f32, g as f32, b as f32);
+                let new_s = (s * (1.0 + adj)).clamp(0.0, 1.0);
+                let (r2, g2, b2) = hsl_to_rgb(h, new_s, l);
                 (
-                    (r2 * 255.0).clamp(0.0, 255.0) as u8,
-                    (g2 * 255.0).clamp(0.0, 255.0) as u8,
-                    (b2 * 255.0).clamp(0.0, 255.0) as u8,
+                    r2.clamp(0.0, 255.0) as u8,
+                    g2.clamp(0.0, 255.0) as u8,
+                    b2.clamp(0.0, 255.0) as u8,
                 )
             });
         });
