@@ -6,7 +6,7 @@ use super::emoji_atlas;
 use super::{Rect, Widget};
 use anyhow::Context;
 use image::RgbaImage;
-use tiny_skia::{FilterQuality, Pixmap, PixmapPaint, Transform};
+use tiny_skia::{IntSize, Pixmap, PixmapPaint, Transform};
 
 static TWEMOJI_DIR: OnceLock<Mutex<Option<String>>> = OnceLock::new();
 
@@ -157,20 +157,196 @@ fn scale_emoji_image(src: &RgbaImage, width: i32, height: i32) -> anyhow::Result
             src.height() * up_factor,
             image::imageops::FilterType::Nearest,
         );
-        let upscaled_pixmap = rgba_to_pixmap(&upscaled);
-        let mut pixmap = Pixmap::new(target_w as u32, target_h as u32)
-            .context("failed to allocate scaled emoji pixmap")?;
-        let paint = PixmapPaint {
-            opacity: 1.0,
-            blend_mode: tiny_skia::BlendMode::SourceOver,
-            quality: FilterQuality::Bicubic,
-        };
-        let transform = Transform::from_scale(
-            target_w as f32 / upscaled.width() as f32,
-            target_h as f32 / upscaled.height() as f32,
-        );
-        pixmap.draw_pixmap(0, 0, upscaled_pixmap.as_ref(), &paint, transform, None);
-        return Ok(pixmap);
+        return resize_nrgba_lanczos2(&upscaled, target_w as usize, target_h as usize);
+    }
+}
+
+fn resize_nrgba_lanczos2(
+    src: &RgbaImage,
+    target_w: usize,
+    target_h: usize,
+) -> anyhow::Result<Pixmap> {
+    let source_w = src.width() as usize;
+    let source_h = src.height() as usize;
+    let scale_x = source_w as f64 / target_w as f64;
+    let scale_y = source_h as f64 / target_h as f64;
+
+    let (coeffs_x, offsets_x, filter_len_x) = create_weights8(target_w, 4, 1.0, scale_x, lanczos2);
+    let temp = resize_nrgba_horizontal_transposed(src, target_w, &coeffs_x, &offsets_x, filter_len_x);
+
+    let (coeffs_y, offsets_y, filter_len_y) = create_weights8(target_h, 4, 1.0, scale_y, lanczos2);
+    let out = resize_rgba_horizontal_transposed(
+        &temp,
+        source_h,
+        target_w,
+        target_h,
+        &coeffs_y,
+        &offsets_y,
+        filter_len_y,
+    );
+
+    let size = IntSize::from_wh(target_w as u32, target_h as u32)
+        .context("failed to build scaled emoji pixmap size")?;
+    Pixmap::from_vec(out, size)
+        .context("failed to allocate scaled emoji pixmap")
+}
+
+fn resize_nrgba_horizontal_transposed(
+    src: &RgbaImage,
+    target_w: usize,
+    coeffs: &[i16],
+    offsets: &[i32],
+    filter_len: usize,
+) -> Vec<u8> {
+    let source_w = src.width() as usize;
+    let source_h = src.height() as usize;
+    let src_raw = src.as_raw();
+    let mut out = vec![0; source_h * target_w * 4];
+    let max_x = source_w.saturating_sub(1) as i32;
+
+    for x in 0..source_h {
+        let row = &src_raw[x * source_w * 4..(x + 1) * source_w * 4];
+        for y in 0..target_w {
+            let mut rgba = [0i32; 4];
+            let mut sum = 0i32;
+            let start = offsets[y];
+            let ci = y * filter_len;
+            for i in 0..filter_len {
+                let coeff = coeffs[ci + i];
+                if coeff == 0 {
+                    continue;
+                }
+                let mut xi = start + i as i32;
+                if xi < 0 {
+                    xi = 0;
+                } else if xi >= max_x {
+                    xi = max_x;
+                }
+                let off = xi as usize * 4;
+                let a = row[off + 3] as i32;
+                let r = (row[off] as i32 * a) / 0xff;
+                let g = (row[off + 1] as i32 * a) / 0xff;
+                let b = (row[off + 2] as i32 * a) / 0xff;
+
+                rgba[0] += coeff as i32 * r;
+                rgba[1] += coeff as i32 * g;
+                rgba[2] += coeff as i32 * b;
+                rgba[3] += coeff as i32 * a;
+                sum += coeff as i32;
+            }
+
+            let xo = (y * source_h + x) * 4;
+            out[xo] = clamp_u8_div(rgba[0], sum);
+            out[xo + 1] = clamp_u8_div(rgba[1], sum);
+            out[xo + 2] = clamp_u8_div(rgba[2], sum);
+            out[xo + 3] = clamp_u8_div(rgba[3], sum);
+        }
+    }
+
+    out
+}
+
+fn resize_rgba_horizontal_transposed(
+    src: &[u8],
+    source_w: usize,
+    source_h: usize,
+    target_w: usize,
+    coeffs: &[i16],
+    offsets: &[i32],
+    filter_len: usize,
+) -> Vec<u8> {
+    let mut out = vec![0; target_w * source_h * 4];
+    let max_x = source_w.saturating_sub(1) as i32;
+
+    for x in 0..source_h {
+        let row = &src[x * source_w * 4..(x + 1) * source_w * 4];
+        for y in 0..target_w {
+            let mut rgba = [0i32; 4];
+            let mut sum = 0i32;
+            let start = offsets[y];
+            let ci = y * filter_len;
+            for i in 0..filter_len {
+                let coeff = coeffs[ci + i];
+                if coeff == 0 {
+                    continue;
+                }
+                let mut xi = start + i as i32;
+                if xi < 0 {
+                    xi = 0;
+                } else if xi >= max_x {
+                    xi = max_x;
+                }
+                let off = xi as usize * 4;
+                rgba[0] += coeff as i32 * row[off] as i32;
+                rgba[1] += coeff as i32 * row[off + 1] as i32;
+                rgba[2] += coeff as i32 * row[off + 2] as i32;
+                rgba[3] += coeff as i32 * row[off + 3] as i32;
+                sum += coeff as i32;
+            }
+
+            let xo = (y * source_h + x) * 4;
+            out[xo] = clamp_u8_div(rgba[0], sum);
+            out[xo + 1] = clamp_u8_div(rgba[1], sum);
+            out[xo + 2] = clamp_u8_div(rgba[2], sum);
+            out[xo + 3] = clamp_u8_div(rgba[3], sum);
+        }
+    }
+
+    out
+}
+
+fn clamp_u8_div(value: i32, sum: i32) -> u8 {
+    clamp_u8(value / sum)
+}
+
+fn clamp_u8(value: i32) -> u8 {
+    if (0..=255).contains(&value) {
+        value as u8
+    } else if value > 255 {
+        255
+    } else {
+        0
+    }
+}
+
+fn create_weights8(
+    output_len: usize,
+    filter_length: usize,
+    blur: f64,
+    scale: f64,
+    kernel: fn(f64) -> f64,
+) -> (Vec<i16>, Vec<i32>, usize) {
+    let filter_length = filter_length * blur.mul_add(scale, 0.0).ceil().max(1.0) as usize;
+    let filter_factor = (1.0 / (blur * scale)).min(1.0);
+
+    let mut coeffs = vec![0; output_len * filter_length];
+    let mut offsets = vec![0; output_len];
+    for y in 0..output_len {
+        let mut interp_x = scale * (y as f64 + 0.5) - 0.5;
+        offsets[y] = interp_x as i32 - filter_length as i32 / 2 + 1;
+        interp_x -= offsets[y] as f64;
+        for i in 0..filter_length {
+            let input = (interp_x - i as f64) * filter_factor;
+            coeffs[y * filter_length + i] = (kernel(input) * 256.0) as i16;
+        }
+    }
+    (coeffs, offsets, filter_length)
+}
+
+fn sinc(x: f64) -> f64 {
+    let x = x.abs() * std::f64::consts::PI;
+    if x >= 1.220_703e-4 {
+        x.sin() / x
+    } else {
+        1.0
+    }
+}
+
+fn lanczos2(x: f64) -> f64 {
+    if (-2.0..2.0).contains(&x) {
+        sinc(x) * sinc(x * 0.5)
+    } else {
+        0.0
     }
 }
 
