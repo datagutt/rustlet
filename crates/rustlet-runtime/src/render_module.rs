@@ -31,6 +31,10 @@ pub(crate) fn set_render_context(is_2x: bool) {
     RENDER_IS_2X.with(|cell| cell.set(is_2x));
 }
 
+pub(crate) fn render_is_2x() -> bool {
+    RENDER_IS_2X.with(|cell| cell.get())
+}
+
 fn default_font(font: &str) -> &str {
     if !font.is_empty() {
         return font;

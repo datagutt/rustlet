@@ -829,6 +829,28 @@ def main(config):
         assert_eq!(roots.len(), 1);
     }
 
+    #[test]
+    fn pixlet_qrcode_module_scales_in_2x_mode() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"assert.star\", \"assert\")\n",
+            "load(\"qrcode.star\", \"qrcode\")\n",
+            "load(\"render.star\", \"render\")\n",
+            "\n",
+            "code = qrcode.generate(url = \"WIFI:T:WPA;S:Rustlet;P:compat123;;\", size = \"large\", color = \"#fff\", background = \"#000\")\n",
+            "\n",
+            "def main(config):\n",
+            "    img = render.Image(src = code)\n",
+            "    assert.eq(img.size(), (58, 58))\n",
+            "    return render.Root(child = img)\n",
+        );
+
+        let roots = applet
+            .run_with_options("test.star", src, &HashMap::new(), 64, 32, true, None)
+            .unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
     fn build_test_zip_archive() -> Vec<u8> {
         let files = [
             ("readme.txt", "This archive contains some text files."),
