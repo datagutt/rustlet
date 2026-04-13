@@ -1,0 +1,23 @@
+crates/rustlet-runtime/src/http_module.rs
+  02250d0509593572 407-411,419-423,488-492,500-504,542-546,554-558
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "7c23c013cac1e5d2e60d2e9817f58166a27be3ef",
+  "prompts": {
+    "02250d0509593572": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2613f9e-2875-408d-ad2f-f5db6606548a",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "datagutt",
+      "messages": [],
+      "total_additions": 30,
+      "total_deletions": 15,
+      "accepted_lines": 30,
+      "overriden_lines": 0
+    }
+  }
+}
