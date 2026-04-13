@@ -18,12 +18,10 @@ impl Circle {
     }
 }
 
-/// Build gg's 16-segment quadratic-Bézier circle and recursively subdivide
-/// each quad into straight lines using freetype/raster's `Add2` splitting
-/// rule. `ab_glyph_rasterizer` has its own quad subdivision heuristic that
-/// deviates from freetype's at the small-radius circles pixlet renders for
-/// analog clocks; feeding pre-flattened lines keeps both rasterizers reading
-/// the same input geometry.
+/// Build the same 16-segment quadratic-Bézier circle gg emits via
+/// `DrawEllipticalArc`. Our port of freetype's raster handles the quads with
+/// the identical decomposition rule as pixlet, so we can feed them straight
+/// through without pre-flattening.
 fn build_circle_path(cx: f32, cy: f32, r: f32) -> FtPath {
     const N: i32 = 16;
     let mut path = FtPath::new();
@@ -32,7 +30,6 @@ fn build_circle_path(cx: f32, cy: f32, r: f32) -> FtPath {
     let cxd = cx as f64;
     let cyd = cy as f64;
 
-    let mut first = None;
     for i in 0..N {
         let p1 = i as f64 / N as f64;
         let p2 = (i + 1) as f64 / N as f64;
@@ -49,46 +46,10 @@ fn build_circle_path(cx: f32, cy: f32, r: f32) -> FtPath {
 
         if i == 0 {
             path.move_to(x0 as f32, y0 as f32);
-            first = Some((x0, y0));
         }
-        flatten_quad(
-            &mut path,
-            (x0, y0),
-            (ctrl_x, ctrl_y),
-            (x2, y2),
-        );
-    }
-    if let Some((fx, fy)) = first {
-        path.line_to(fx as f32, fy as f32);
+        path.quad_to(ctrl_x as f32, ctrl_y as f32, x2 as f32, y2 as f32);
     }
     path
-}
-
-/// Recursively subdivide a quadratic Bézier until the deviation from linear
-/// drops below `tol`, then emit straight segments. This matches freetype's
-/// approach where quadratic curves are decomposed into fine polylines before
-/// scanline rasterization. The tolerance of 0.25 pixels gives the rasterizer
-/// enough precision to produce pixel-identical coverage with pixlet.
-fn flatten_quad(
-    path: &mut FtPath,
-    p0: (f64, f64),
-    c: (f64, f64),
-    p1: (f64, f64),
-) {
-    const TOL: f64 = 0.25;
-    let dx = p0.0 - 2.0 * c.0 + p1.0;
-    let dy = p0.1 - 2.0 * c.1 + p1.1;
-    let dev = (dx * dx + dy * dy).sqrt();
-    if dev <= TOL {
-        path.line_to(p1.0 as f32, p1.1 as f32);
-        return;
-    }
-    // de Casteljau subdivision at t=0.5
-    let m01 = ((p0.0 + c.0) * 0.5, (p0.1 + c.1) * 0.5);
-    let m12 = ((c.0 + p1.0) * 0.5, (c.1 + p1.1) * 0.5);
-    let mid = ((m01.0 + m12.0) * 0.5, (m01.1 + m12.1) * 0.5);
-    flatten_quad(path, p0, m01, mid);
-    flatten_quad(path, mid, m12, p1);
 }
 
 impl Widget for Circle {
