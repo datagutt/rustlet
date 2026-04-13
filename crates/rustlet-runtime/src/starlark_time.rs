@@ -33,6 +33,14 @@ impl StarlarkTime {
     }
 
     pub fn now() -> Self {
+        // Tests and compat runs pin "now" via an env var so rustlet and pixlet
+        // observe the same timestamp. Production callers fall through to the
+        // real system clock.
+        if let Ok(secs) = std::env::var("RUSTLET_FAKE_NOW_UNIX") {
+            if let Ok(parsed) = secs.trim().parse::<i64>() {
+                return Self::from_unix(parsed, 0);
+            }
+        }
         let duration = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default();

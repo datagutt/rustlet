@@ -167,8 +167,23 @@ pub fn run_case(workspace_root: &Path, crate_root: &Path, case: CompatCase) -> R
         });
     }
 
-    let rustlet = run_rustlet_case(workspace_root, crate_root, &case)?;
+    // For live-data cases we pin rustlet's `time.now()` to a timestamp captured
+    // right before launching pixlet. Pixlet itself reads the system clock, but
+    // since it runs within milliseconds the two engines observe the same
+    // minute/second and the analog-clock style apps render identically.
+    let pinned_now = if case.requires_live_data {
+        Some(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0),
+        )
+    } else {
+        None
+    };
+
     let pixlet = run_pixlet_case(workspace_root, crate_root, &case)?;
+    let rustlet = run_rustlet_case(workspace_root, crate_root, &case, pinned_now)?;
     let comparison = compare_runs(&case, &rustlet, &pixlet);
     let artifacts_root = artifacts_root(workspace_root);
 
@@ -250,7 +265,38 @@ fn default_output_format() -> OutputFormat {
     OutputFormat::Webp
 }
 
-fn run_rustlet_case(workspace_root: &Path, crate_root: &Path, case: &CompatCase) -> Result<NormalizedRun> {
+fn run_rustlet_case(
+    workspace_root: &Path,
+    crate_root: &Path,
+    case: &CompatCase,
+    pinned_now: Option<i64>,
+) -> Result<NormalizedRun> {
+    // Pin the clock before the applet runs so the in-process `time.now()`
+    // reads from the env var. A guard restores the previous value on return so
+    // tests run sequentially don't leak state.
+    struct EnvGuard {
+        key: &'static str,
+        previous: Option<String>,
+    }
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            match &self.previous {
+                Some(v) => std::env::set_var(self.key, v),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
+    let _guard = if let Some(ts) = pinned_now {
+        let previous = std::env::var("RUSTLET_FAKE_NOW_UNIX").ok();
+        std::env::set_var("RUSTLET_FAKE_NOW_UNIX", ts.to_string());
+        Some(EnvGuard {
+            key: "RUSTLET_FAKE_NOW_UNIX",
+            previous,
+        })
+    } else {
+        None
+    };
+
     let resolved = resolve_case_path(workspace_root, crate_root, case)?;
     let entry = resolve_entry_file(&resolved)?;
     let src = fs::read_to_string(&entry)
