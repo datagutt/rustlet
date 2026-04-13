@@ -6,7 +6,7 @@ use super::emoji_atlas;
 use super::{Rect, Widget};
 use anyhow::Context;
 use image::RgbaImage;
-use tiny_skia::{Pixmap, PixmapPaint, Transform};
+use tiny_skia::{FilterQuality, Pixmap, PixmapPaint, Transform};
 
 static TWEMOJI_DIR: OnceLock<Mutex<Option<String>>> = OnceLock::new();
 
@@ -137,15 +137,16 @@ fn scale_emoji_image(src: &RgbaImage, width: i32, height: i32) -> anyhow::Result
     let (source_w, source_h) = (src.width() as i32, src.height() as i32);
     let (target_w, target_h) = resolve_target_dimensions(source_w, source_h, width, height)?;
 
-    let scaled = if target_w == source_w && target_h == source_h {
-        src.clone()
+    if target_w == source_w && target_h == source_h {
+        return Ok(rgba_to_pixmap(src));
     } else if target_w % source_w == 0 && target_h % source_h == 0 {
-        image::imageops::resize(
+        let scaled = image::imageops::resize(
             src,
             target_w as u32,
             target_h as u32,
             image::imageops::FilterType::Nearest,
-        )
+        );
+        return Ok(rgba_to_pixmap(&scaled));
     } else {
         let sx = target_w as f64 / source_w as f64;
         let sy = target_h as f64 / source_h as f64;
@@ -156,15 +157,21 @@ fn scale_emoji_image(src: &RgbaImage, width: i32, height: i32) -> anyhow::Result
             src.height() * up_factor,
             image::imageops::FilterType::Nearest,
         );
-        image::imageops::resize(
-            &upscaled,
-            target_w as u32,
-            target_h as u32,
-            image::imageops::FilterType::CatmullRom,
-        )
-    };
-
-    Ok(rgba_to_pixmap(&scaled))
+        let upscaled_pixmap = rgba_to_pixmap(&upscaled);
+        let mut pixmap = Pixmap::new(target_w as u32, target_h as u32)
+            .context("failed to allocate scaled emoji pixmap")?;
+        let paint = PixmapPaint {
+            opacity: 1.0,
+            blend_mode: tiny_skia::BlendMode::SourceOver,
+            quality: FilterQuality::Bicubic,
+        };
+        let transform = Transform::from_scale(
+            target_w as f32 / upscaled.width() as f32,
+            target_h as f32 / upscaled.height() as f32,
+        );
+        pixmap.draw_pixmap(0, 0, upscaled_pixmap.as_ref(), &paint, transform, None);
+        return Ok(pixmap);
+    }
 }
 
 fn rgba_to_pixmap(img: &RgbaImage) -> Pixmap {
