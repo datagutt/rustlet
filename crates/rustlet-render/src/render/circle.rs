@@ -1,8 +1,6 @@
 use super::{Rect, Widget};
 use tiny_skia::{Color, FillRule, Paint, PathBuilder, Pixmap, Transform};
 
-const KAPPA: f32 = 0.5522848;
-
 pub struct Circle {
     pub child: Option<Box<dyn Widget>>,
     pub color: Option<Color>,
@@ -19,15 +17,39 @@ impl Circle {
     }
 }
 
-/// Build a circle path from 4 cubic bezier curves, matching the Go
-/// `gg.DrawCircle` approach.
+/// Build a circle path using 16 quadratic Bézier segments, matching the path
+/// gg.DrawCircle emits via DrawEllipticalArc in pixlet's renderer. Using the
+/// same segmentation keeps the anti-aliased edge pixels bit-for-bit identical
+/// to pixlet's output for small circles.
 fn circle_path(cx: f32, cy: f32, r: f32) -> Option<tiny_skia::Path> {
+    const N: i32 = 16;
     let mut pb = PathBuilder::new();
-    pb.move_to(cx + r, cy);
-    pb.cubic_to(cx + r, cy + r * KAPPA, cx + r * KAPPA, cy + r, cx, cy + r);
-    pb.cubic_to(cx - r * KAPPA, cy + r, cx - r, cy + r * KAPPA, cx - r, cy);
-    pb.cubic_to(cx - r, cy - r * KAPPA, cx - r * KAPPA, cy - r, cx, cy - r);
-    pb.cubic_to(cx + r * KAPPA, cy - r, cx + r, cy - r * KAPPA, cx + r, cy);
+    let two_pi = std::f64::consts::TAU;
+    let rd = r as f64;
+    let cxd = cx as f64;
+    let cyd = cy as f64;
+
+    for i in 0..N {
+        let p1 = i as f64 / N as f64;
+        let p2 = (i + 1) as f64 / N as f64;
+        let a1 = two_pi * p1;
+        let a2 = two_pi * p2;
+        let x0 = cxd + rd * a1.cos();
+        let y0 = cyd + rd * a1.sin();
+        let x1 = cxd + rd * ((a1 + a2) / 2.0).cos();
+        let y1 = cyd + rd * ((a1 + a2) / 2.0).sin();
+        let x2 = cxd + rd * a2.cos();
+        let y2 = cyd + rd * a2.sin();
+        // gg picks the control point so the bezier interpolates the midpoint
+        // of the arc: `cx = 2*x1 - x0/2 - x2/2`, and similarly for y.
+        let ctrl_x = 2.0 * x1 - x0 / 2.0 - x2 / 2.0;
+        let ctrl_y = 2.0 * y1 - y0 / 2.0 - y2 / 2.0;
+
+        if i == 0 {
+            pb.move_to(x0 as f32, y0 as f32);
+        }
+        pb.quad_to(ctrl_x as f32, ctrl_y as f32, x2 as f32, y2 as f32);
+    }
     pb.close();
     pb.finish()
 }
