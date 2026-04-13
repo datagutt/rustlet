@@ -73,7 +73,16 @@ pub fn encode_webp(frames: &[tiny_skia::Pixmap], delay_ms: u16) -> Result<Vec<u8
     let width = frames[0].width();
     let height = frames[0].height();
 
-    let mut encoder = webp_animation::Encoder::new((width, height))
+    let options = webp_animation::EncoderOptions {
+        encoding_config: Some(webp_animation::EncodingConfig {
+            encoding_type: webp_animation::EncodingType::Lossless,
+            // Match Pixlet's default WebP lossless preset level (6) closely.
+            quality: 75.0,
+            method: 4,
+        }),
+        ..Default::default()
+    };
+    let mut encoder = webp_animation::Encoder::new_with_options((width, height), options)
         .map_err(|e| anyhow::anyhow!("webp encoder init failed: {:?}", e))?;
 
     for (i, pixmap) in frames.iter().enumerate() {
