@@ -34,9 +34,9 @@ Scope for this audit:
 
 - [x] `random.star` is incomplete: missing `seed()`, `float()`, `secure=True` handling, and Pixlet's deterministic thread-scoped seeding behavior.
 - [x] `color.star` is incomplete: missing writable `h`, `s`, `v` fields and missing `hsv()` / `hsva()` methods on `Color`.
-- [ ] `time.star` is only partially compatible; Pixlet supports richer parsing/format/location behavior than the current implementation.
-- [ ] `http.star` behavior diverges from Pixlet: request argument surface and caching/header semantics do not match the reference implementation.
-- [ ] `schema.star` is currently a lightweight struct factory, not a compatibility-complete implementation.
+- [x] `time.star` is only partially compatible; Pixlet supports richer parsing/format/location behavior than the current implementation.
+- [x] `http.star` behavior diverges from Pixlet: request argument surface and caching/header semantics do not match the reference implementation.
+- [x] `schema.star` is currently a lightweight struct factory, not a compatibility-complete implementation.
 
 ### Rendering behavior risks
 
@@ -50,10 +50,12 @@ Scope for this audit:
 
 ### CLI / tooling gaps
 
-- [ ] CLI surface is far smaller than Pixlet: only `render` exists today.
-- [ ] Missing core Pixlet commands and workflows:
-  `lint`, `format`, `schema`, `serve`, `version`, and manifest-aware validation flows.
-- [ ] 2x CLI behavior is only partially compatible with Pixlet.
+- [x] CLI surface is far smaller than Pixlet: only `render` exists today.
+- [x] Missing core Pixlet commands and workflows:
+  `lint`, `format`, `schema`, `version`, and manifest-aware validation flows. (`serve` still pending.)
+- [x] 2x CLI behavior is only partially compatible with Pixlet.
+
+Remaining CLI gap: `serve` subcommand (live preview HTTP server).
 
 ## Phased Plan
 
@@ -136,9 +138,9 @@ Suggested commit:
 
 Goal: close the gap between `rustlet` and the `pixlet` developer workflow.
 
-- [ ] Add missing CLI subcommands in priority order: `version`, `lint`, `schema`, `format`, `serve`.
-- [ ] Implement manifest-aware validation paths.
-- [ ] Align 2x CLI defaults and output naming with Pixlet.
+- [x] Add missing CLI subcommands in priority order: `version`, `lint`, `schema`, `format`. (`serve` still pending.)
+- [x] Implement manifest-aware validation paths.
+- [x] Align 2x CLI defaults and output naming with Pixlet.
 
 Suggested commit:
 
