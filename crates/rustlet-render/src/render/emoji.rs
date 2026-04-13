@@ -6,7 +6,7 @@ use super::emoji_atlas;
 use super::{Rect, Widget};
 use anyhow::Context;
 use image::RgbaImage;
-use tiny_skia::Pixmap;
+use tiny_skia::{Pixmap, PixmapPaint, Transform};
 
 static TWEMOJI_DIR: OnceLock<Mutex<Option<String>>> = OnceLock::new();
 
@@ -160,7 +160,7 @@ fn scale_emoji_image(src: &RgbaImage, width: i32, height: i32) -> anyhow::Result
             &upscaled,
             target_w as u32,
             target_h as u32,
-            image::imageops::FilterType::Lanczos3,
+            image::imageops::FilterType::CatmullRom,
         )
     };
 
@@ -197,54 +197,14 @@ impl Widget for Emoji {
             Some(pm) => pm,
             None => return,
         };
-
-        let src_w = src.width() as i32;
-        let src_h = src.height() as i32;
-        let dst_w = pixmap.width() as i32;
-        let dst_h = pixmap.height() as i32;
-
-        let src_pixels = src.pixels();
-        let dst_pixels = pixmap.pixels_mut();
-
-        for sy in 0..src_h {
-            let dy = bounds.y + sy;
-            if dy < 0 || dy >= dst_h {
-                continue;
-            }
-            for sx in 0..src_w {
-                let dx = bounds.x + sx;
-                if dx < 0 || dx >= dst_w {
-                    continue;
-                }
-
-                let src_px = src_pixels[(sy * src_w + sx) as usize];
-                if src_px.alpha() == 0 {
-                    continue;
-                }
-
-                let dst_idx = (dy * dst_w + dx) as usize;
-                if src_px.alpha() == 255 {
-                    dst_pixels[dst_idx] = src_px;
-                } else {
-                    let sa = src_px.alpha() as u16;
-                    let inv_sa = 255 - sa;
-                    let dst_px = dst_pixels[dst_idx];
-
-                    let r = src_px.red() as u16 + (dst_px.red() as u16 * inv_sa / 255);
-                    let g = src_px.green() as u16 + (dst_px.green() as u16 * inv_sa / 255);
-                    let b = src_px.blue() as u16 + (dst_px.blue() as u16 * inv_sa / 255);
-                    let a = sa + (dst_px.alpha() as u16 * inv_sa / 255);
-
-                    dst_pixels[dst_idx] = tiny_skia::PremultipliedColorU8::from_rgba(
-                        r.min(255) as u8,
-                        g.min(255) as u8,
-                        b.min(255) as u8,
-                        a.min(255) as u8,
-                    )
-                    .unwrap_or(dst_px);
-                }
-            }
-        }
+        pixmap.draw_pixmap(
+            bounds.x,
+            bounds.y,
+            src.as_ref(),
+            &PixmapPaint::default(),
+            Transform::identity(),
+            None,
+        );
     }
 
     fn frame_count(&self, _bounds: Rect) -> i32 {
