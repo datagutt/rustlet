@@ -324,9 +324,7 @@ fn run_pixlet_case(workspace_root: &Path, crate_root: &Path, case: &CompatCase) 
         })
         .arg("--silent")
         .arg("--timeout")
-        .arg("30s")
-        .arg("--max-duration")
-        .arg("3s");
+        .arg("30s");
 
     if case.double {
         cmd.arg("--2x");
