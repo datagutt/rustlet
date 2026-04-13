@@ -1,0 +1,29 @@
+crates/rustlet-render/Cargo.toml
+  02250d0509593572 11
+crates/rustlet-render/src/render/ft_raster.rs
+  02250d0509593572 1-142
+crates/rustlet-render/src/render/circle.rs
+  02250d0509593572 1,3,21-27,29,35,51-52,54-59,61-91,105-107
+crates/rustlet-render/src/render/mod.rs
+  02250d0509593572 12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "8c9a5373f15e8cc291328ae6f03ff25087ed85a4",
+  "prompts": {
+    "02250d0509593572": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2613f9e-2875-408d-ad2f-f5db6606548a",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "datagutt",
+      "messages": [],
+      "total_additions": 1206,
+      "total_deletions": 1034,
+      "accepted_lines": 1121,
+      "overriden_lines": 0
+    }
+  }
+}
