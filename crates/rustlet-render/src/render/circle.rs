@@ -1,5 +1,6 @@
+use super::ft_raster::{fill_path as ft_fill_path, FtPath};
 use super::{Rect, Widget};
-use tiny_skia::{Color, FillRule, Paint, PathBuilder, Pixmap, Transform};
+use tiny_skia::{Color, Pixmap};
 
 pub struct Circle {
     pub child: Option<Box<dyn Widget>>,
@@ -17,18 +18,21 @@ impl Circle {
     }
 }
 
-/// Build a circle path using 16 quadratic Bézier segments, matching the path
-/// gg.DrawCircle emits via DrawEllipticalArc in pixlet's renderer. Using the
-/// same segmentation keeps the anti-aliased edge pixels bit-for-bit identical
-/// to pixlet's output for small circles.
-fn circle_path(cx: f32, cy: f32, r: f32) -> Option<tiny_skia::Path> {
+/// Build gg's 16-segment quadratic-Bézier circle and recursively subdivide
+/// each quad into straight lines using freetype/raster's `Add2` splitting
+/// rule. `ab_glyph_rasterizer` has its own quad subdivision heuristic that
+/// deviates from freetype's at the small-radius circles pixlet renders for
+/// analog clocks; feeding pre-flattened lines keeps both rasterizers reading
+/// the same input geometry.
+fn build_circle_path(cx: f32, cy: f32, r: f32) -> FtPath {
     const N: i32 = 16;
-    let mut pb = PathBuilder::new();
+    let mut path = FtPath::new();
     let two_pi = std::f64::consts::TAU;
     let rd = r as f64;
     let cxd = cx as f64;
     let cyd = cy as f64;
 
+    let mut first = None;
     for i in 0..N {
         let p1 = i as f64 / N as f64;
         let p2 = (i + 1) as f64 / N as f64;
@@ -40,18 +44,51 @@ fn circle_path(cx: f32, cy: f32, r: f32) -> Option<tiny_skia::Path> {
         let y1 = cyd + rd * ((a1 + a2) / 2.0).sin();
         let x2 = cxd + rd * a2.cos();
         let y2 = cyd + rd * a2.sin();
-        // gg picks the control point so the bezier interpolates the midpoint
-        // of the arc: `cx = 2*x1 - x0/2 - x2/2`, and similarly for y.
         let ctrl_x = 2.0 * x1 - x0 / 2.0 - x2 / 2.0;
         let ctrl_y = 2.0 * y1 - y0 / 2.0 - y2 / 2.0;
 
         if i == 0 {
-            pb.move_to(x0 as f32, y0 as f32);
+            path.move_to(x0 as f32, y0 as f32);
+            first = Some((x0, y0));
         }
-        pb.quad_to(ctrl_x as f32, ctrl_y as f32, x2 as f32, y2 as f32);
+        flatten_quad(
+            &mut path,
+            (x0, y0),
+            (ctrl_x, ctrl_y),
+            (x2, y2),
+        );
     }
-    pb.close();
-    pb.finish()
+    if let Some((fx, fy)) = first {
+        path.line_to(fx as f32, fy as f32);
+    }
+    path
+}
+
+/// Recursively subdivide a quadratic Bézier until the deviation from linear
+/// drops below `tol`, then emit straight segments. This matches freetype's
+/// approach where quadratic curves are decomposed into fine polylines before
+/// scanline rasterization. The tolerance of 0.25 pixels gives the rasterizer
+/// enough precision to produce pixel-identical coverage with pixlet.
+fn flatten_quad(
+    path: &mut FtPath,
+    p0: (f64, f64),
+    c: (f64, f64),
+    p1: (f64, f64),
+) {
+    const TOL: f64 = 0.25;
+    let dx = p0.0 - 2.0 * c.0 + p1.0;
+    let dy = p0.1 - 2.0 * c.1 + p1.1;
+    let dev = (dx * dx + dy * dy).sqrt();
+    if dev <= TOL {
+        path.line_to(p1.0 as f32, p1.1 as f32);
+        return;
+    }
+    // de Casteljau subdivision at t=0.5
+    let m01 = ((p0.0 + c.0) * 0.5, (p0.1 + c.1) * 0.5);
+    let m12 = ((c.0 + p1.0) * 0.5, (c.1 + p1.1) * 0.5);
+    let mid = ((m01.0 + m12.0) * 0.5, (m01.1 + m12.1) * 0.5);
+    flatten_quad(path, p0, m01, mid);
+    flatten_quad(path, mid, m12, p1);
 }
 
 impl Widget for Circle {
@@ -65,18 +102,9 @@ impl Widget for Circle {
         let cy = bounds.y as f32 + r;
 
         if let Some(color) = self.color {
-            if let Some(path) = circle_path(cx, cy, r) {
-                let mut paint = Paint::default();
-                paint.set_color(color);
-                paint.anti_alias = true;
-                pixmap.fill_path(
-                    &path,
-                    &paint,
-                    FillRule::Winding,
-                    Transform::identity(),
-                    None,
-                );
-            }
+            let path = build_circle_path(cx, cy, r);
+            let raster_bounds = Rect::new(bounds.x, bounds.y, self.diameter, self.diameter);
+            ft_fill_path(pixmap, raster_bounds, &path, color);
         }
 
         if let Some(child) = &self.child {

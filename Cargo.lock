@@ -2590,6 +2590,7 @@ dependencies = [
 name = "rustlet-render"
 version = "0.1.0"
 dependencies = [
+ "ab_glyph_rasterizer",
  "anyhow",
  "color-name",
  "image",
