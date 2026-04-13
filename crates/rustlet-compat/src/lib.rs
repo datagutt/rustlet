@@ -170,7 +170,7 @@ pub fn run_case(workspace_root: &Path, crate_root: &Path, case: CompatCase) -> R
     let rustlet = run_rustlet_case(workspace_root, crate_root, &case)?;
     let pixlet = run_pixlet_case(workspace_root, crate_root, &case)?;
     let comparison = compare_runs(&case, &rustlet, &pixlet);
-    let artifacts_root = workspace_root.join("target/compat-artifacts");
+    let artifacts_root = artifacts_root(workspace_root);
 
     match case.policy {
         ComparisonPolicy::Exact => match comparison {
@@ -217,6 +217,21 @@ pub fn run_case(workspace_root: &Path, crate_root: &Path, case: CompatCase) -> R
 
 pub fn pixlet_available(workspace_root: &Path) -> bool {
     resolve_pixlet_binary(workspace_root).is_ok() && build_webp_dump_binary(workspace_root).is_ok()
+}
+
+fn artifacts_root(workspace_root: &Path) -> PathBuf {
+    if let Some(path) = env::var_os("RUSTLET_COMPAT_ARTIFACTS_DIR") {
+        return PathBuf::from(path);
+    }
+
+    let workspace_target = workspace_root.join("target/compat-artifacts");
+    if fs::create_dir_all(&workspace_target).is_ok()
+        && tempfile::NamedTempFile::new_in(&workspace_target).is_ok()
+    {
+        return workspace_target;
+    }
+
+    std::env::temp_dir().join("rustlet-compat-artifacts")
 }
 
 fn default_width() -> u32 {
