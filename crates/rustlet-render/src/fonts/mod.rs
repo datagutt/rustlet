@@ -35,6 +35,8 @@ impl Glyph {
 pub struct BitmapFont {
     pub char_width: u8,
     pub char_height: u8,
+    pub ascent: i32,
+    pub descent: i32,
     glyphs: HashMap<char, Glyph>,
 }
 
@@ -64,6 +66,8 @@ impl BitmapFont {
 fn parse_bdf(src: &str) -> BitmapFont {
     let mut font_bbx_w: u8 = 0;
     let mut font_bbx_h: u8 = 0;
+    let mut font_ascent: i32 = 0;
+    let mut font_descent: i32 = 0;
     let mut glyphs = HashMap::new();
 
     let mut in_char = false;
@@ -87,6 +91,16 @@ fn parse_bdf(src: &str) -> BitmapFont {
                 font_bbx_w = parts[1].parse().unwrap_or(0);
                 font_bbx_h = parts[2].parse().unwrap_or(0);
             }
+            continue;
+        }
+
+        if line.starts_with("FONT_ASCENT ") {
+            font_ascent = line[12..].trim().parse().unwrap_or(0);
+            continue;
+        }
+
+        if line.starts_with("FONT_DESCENT ") {
+            font_descent = line[13..].trim().parse().unwrap_or(0);
             continue;
         }
 
@@ -164,6 +178,8 @@ fn parse_bdf(src: &str) -> BitmapFont {
     BitmapFont {
         char_width: font_bbx_w,
         char_height: font_bbx_h,
+        ascent: font_ascent,
+        descent: font_descent,
         glyphs,
     }
 }

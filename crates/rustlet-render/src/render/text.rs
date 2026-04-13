@@ -105,10 +105,10 @@ impl Text {
         let dst_w = pixmap.width() as usize;
         let dst_h = pixmap.height() as usize;
 
-        // Pixlet positions text relative to a baseline and lets glyphs clip when the
-        // requested line height is smaller than the font's native height. Do not clamp
-        // this origin to zero, or short explicit heights render too low.
-        let text_top = text_h - font_h;
+        // Pixlet paints text from a baseline defined by the font descent, then
+        // applies each glyph's BBX offsets. This allows fonts like tom-thumb
+        // and short explicit heights to clip correctly.
+        let baseline = text_h - font.descent;
 
         let mut cursor_x: i32 = 0;
         for segment in segments {
@@ -118,7 +118,7 @@ impl Text {
                     draw_text_segment(
                         &text,
                         font,
-                        text_top,
+                        baseline,
                         &premul,
                         &mut cursor_x,
                         dst_w,
@@ -129,7 +129,7 @@ impl Text {
                 TextSegment::Emoji(emoji) => {
                     let (emoji_w, emoji_h) = emoji_atlas::exact_size(&emoji)
                         .expect("segmented emoji must exist in atlas");
-                    let emoji_top = text_h - emoji_h;
+                    let emoji_top = baseline - emoji_h;
                     let widget =
                         Emoji::new(&emoji, emoji_w, emoji_h).expect("inline emoji render failed");
                     widget.paint(
@@ -155,7 +155,7 @@ impl Text {
 fn draw_text_segment(
     text: &str,
     font: &crate::fonts::BitmapFont,
-    top: i32,
+    baseline: i32,
     premul: &PremultipliedColorU8,
     cursor_x: &mut i32,
     dst_w: usize,
@@ -168,7 +168,8 @@ fn draw_text_segment(
                 for col in 0..glyph.width as u8 {
                     if glyph.pixel(col, row) {
                         let px = *cursor_x + glyph.x_offset as i32 + col as i32;
-                        let py = top + row as i32;
+                        let py =
+                            baseline - glyph.y_offset as i32 - glyph.height as i32 + row as i32;
                         if px >= 0 && (px as usize) < dst_w && py >= 0 && (py as usize) < dst_h {
                             pixels[py as usize * dst_w + px as usize] = *premul;
                         }
