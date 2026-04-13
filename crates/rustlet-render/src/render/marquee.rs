@@ -1,5 +1,5 @@
 use super::{Rect, Widget};
-use tiny_skia::Pixmap;
+use tiny_skia::{Pixmap, PixmapPaint, Transform};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ScrollDirection {
@@ -134,29 +134,32 @@ impl Widget for Marquee {
             offset = offend;
         };
 
-        let _pb = self.paint_bounds(bounds, frame_idx);
+        let pb = self.paint_bounds(bounds, frame_idx);
+        if pb.width <= 0 || pb.height <= 0 {
+            return;
+        }
+
+        let mut clipped =
+            Pixmap::new(pb.width as u32, pb.height as u32).expect("marquee viewport must be valid");
 
         if self.is_vertical() {
             let final_offset = offset - (align_f * cb.height as f64) as i32;
-            let child_bounds = Rect::new(
-                bounds.x,
-                bounds.y + final_offset,
-                bounds.width,
-                self.height * 10,
-            );
-            // Only paint within marquee area by clipping y range
-            // We simulate clip by adjusting the child paint area
-            self.child.paint(pixmap, child_bounds, 0);
+            let child_bounds = Rect::new(0, final_offset, pb.width, self.height * 10);
+            self.child.paint(&mut clipped, child_bounds, 0);
         } else {
             let final_offset = offset - (align_f * cb.width as f64) as i32;
-            let child_bounds = Rect::new(
-                bounds.x + final_offset,
-                bounds.y,
-                self.width * 10,
-                bounds.height,
-            );
-            self.child.paint(pixmap, child_bounds, 0);
+            let child_bounds = Rect::new(final_offset, 0, self.width * 10, pb.height);
+            self.child.paint(&mut clipped, child_bounds, 0);
         }
+
+        pixmap.draw_pixmap(
+            bounds.x,
+            bounds.y,
+            clipped.as_ref(),
+            &PixmapPaint::default(),
+            Transform::identity(),
+            None,
+        );
     }
 }
 
