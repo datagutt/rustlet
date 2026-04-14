@@ -69,7 +69,7 @@ impl Client {
         }
         let agent: ureq::Agent = ureq::Agent::config_builder()
             .timeout_global(Some(REQUEST_TIMEOUT))
-            .user_agent(format!("rustlet/{}", env!("CARGO_PKG_VERSION")))
+            .user_agent(crate::util::user_agent())
             .build()
             .into();
         Ok(Self {

@@ -245,6 +245,24 @@ pub fn explicit_output(path: Option<&Path>) -> Option<&Path> {
     }
 }
 
+/// Build the User-Agent string for all outgoing HTTP traffic.
+///
+/// Format mirrors pixlet's `pixlet/<version>[-<git7>] (<goos>/<goarch>)` so
+/// server operators who already parse pixlet logs get the same shape. The
+/// git sha is baked in at compile time via build.rs; an empty sha (cargo
+/// install from a tarball) produces the shorter form.
+pub fn user_agent() -> String {
+    let version = env!("CARGO_PKG_VERSION");
+    let sha = env!("RUSTLET_GIT_SHA");
+    let os = std::env::consts::OS;
+    let arch = std::env::consts::ARCH;
+    if sha.is_empty() {
+        format!("rustlet/{version} ({os}/{arch})")
+    } else {
+        format!("rustlet/{version}-{sha} ({os}/{arch})")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -327,6 +345,15 @@ mod tests {
     fn run_with_timeout_succeeds_before_deadline() {
         let got: i32 = run_with_timeout(Duration::from_secs(2), || Ok(42)).unwrap();
         assert_eq!(got, 42);
+    }
+
+    #[test]
+    fn user_agent_has_pixlet_compatible_shape() {
+        let ua = user_agent();
+        assert!(ua.starts_with("rustlet/"), "got: {ua}");
+        // Either `rustlet/x.y.z (os/arch)` or `rustlet/x.y.z-abc1234 (os/arch)`.
+        assert!(ua.contains(" ("), "got: {ua}");
+        assert!(ua.ends_with(')'), "got: {ua}");
     }
 
     #[test]
