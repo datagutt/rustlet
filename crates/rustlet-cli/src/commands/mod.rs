@@ -3,3 +3,4 @@ pub mod delete;
 pub mod devices;
 pub mod list;
 pub mod push;
+pub mod serve;
