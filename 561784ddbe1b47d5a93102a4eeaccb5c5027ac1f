@@ -1,0 +1,35 @@
+crates/rustlet-runtime/src/manifest.rs
+  973ace9ed2710459 172-207,268-290
+crates/rustlet-cli/src/main.rs
+  973ace9ed2710459 185-191,501-503
+crates/rustlet-cli/templates/manifest.yaml.tmpl
+  973ace9ed2710459 1-8
+crates/rustlet-cli/templates/main.star.tmpl
+  973ace9ed2710459 1-31
+crates/rustlet-cli/Cargo.toml
+  973ace9ed2710459 25
+crates/rustlet-cli/src/commands/create.rs
+  973ace9ed2710459 1-224
+crates/rustlet-cli/src/commands/mod.rs
+  973ace9ed2710459 2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "561784ddbe1b47d5a93102a4eeaccb5c5027ac1f",
+  "prompts": {
+    "973ace9ed2710459": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2864ead3-89b8-4dcf-9f60-7c4793cc0f63",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "datagutt",
+      "messages": [],
+      "total_additions": 363,
+      "total_deletions": 28,
+      "accepted_lines": 335,
+      "overriden_lines": 0
+    }
+  }
+}
