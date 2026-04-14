@@ -1,4 +1,5 @@
 pub mod api;
+pub mod check;
 pub mod community;
 pub mod completion;
 pub mod config_cmd;

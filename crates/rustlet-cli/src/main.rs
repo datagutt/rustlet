@@ -272,6 +272,27 @@ enum Commands {
         action: CommunityAction,
     },
 
+    /// Check one or more apps for manifest, icon, render, format, and lint
+    /// issues. Mirrors pixlet's `cmd/check.go`. The render step is wall-clock
+    /// timed against `--max-render-time`; we do not use profiler output.
+    Check {
+        /// Paths to check. Files or directories.
+        #[arg(default_value = ".")]
+        paths: Vec<PathBuf>,
+
+        /// Recursively discover apps under each directory.
+        #[arg(short, long)]
+        recursive: bool,
+
+        /// Skip apps whose manifest marks them as broken.
+        #[arg(short = 's', long)]
+        skip_broken: bool,
+
+        /// Wall-clock ceiling for the render step.
+        #[arg(long, default_value = "1s")]
+        max_render_time: humantime::Duration,
+    },
+
     /// Profile an applet's starlark execution.
     ///
     /// Unlike pixlet's pprof-based profile output, rustlet emits
@@ -364,7 +385,7 @@ enum Format {
     Webp,
 }
 
-fn run_lint(paths: &[PathBuf], recursive: bool) -> Result<bool> {
+pub(crate) fn run_lint(paths: &[PathBuf], recursive: bool) -> Result<bool> {
     let files = collect_star_files(paths, recursive)?;
     if files.is_empty() {
         eprintln!("no .star files found");
@@ -428,7 +449,7 @@ fn run_lint(paths: &[PathBuf], recursive: bool) -> Result<bool> {
     Ok(!had_issue)
 }
 
-fn run_format(paths: &[PathBuf], dry_run: bool, recursive: bool) -> Result<bool> {
+pub(crate) fn run_format(paths: &[PathBuf], dry_run: bool, recursive: bool) -> Result<bool> {
     let buildifier = std::env::var("BUILDIFIER").unwrap_or_else(|_| "buildifier".to_string());
     // Verify buildifier is on PATH.
     if Command::new(&buildifier)
@@ -710,6 +731,24 @@ fn run() -> Result<ExitCode> {
         }
         Commands::Community { action } => {
             commands::community::run(action)?;
+        }
+        Commands::Check {
+            paths,
+            recursive,
+            skip_broken,
+            max_render_time,
+        } => {
+            let ok = commands::check::run(commands::check::Args {
+                paths,
+                recursive,
+                skip_broken,
+                max_render_time: max_render_time.into(),
+            })?;
+            return Ok(if ok {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(1)
+            });
         }
         Commands::Profile {
             args,
