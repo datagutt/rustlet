@@ -1,0 +1,31 @@
+crates/rustlet-cli/src/util.rs
+  973ace9ed2710459 248-340
+crates/rustlet-cli/src/commands/mod.rs
+  973ace9ed2710459 1
+crates/rustlet-cli/src/commands/serve/handlers.rs
+  973ace9ed2710459 12,15,27,79-81,83-91
+crates/rustlet-cli/src/commands/api.rs
+  973ace9ed2710459 1-254
+crates/rustlet-cli/src/main.rs
+  973ace9ed2710459 224-247,631-646
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "c7d455c68f12aa6be57361dbbccc84d0e33444a5",
+  "prompts": {
+    "973ace9ed2710459": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2864ead3-89b8-4dcf-9f60-7c4793cc0f63",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "datagutt",
+      "messages": [],
+      "total_additions": 415,
+      "total_deletions": 52,
+      "accepted_lines": 403,
+      "overriden_lines": 0
+    }
+  }
+}
