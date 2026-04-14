@@ -1,11 +1,28 @@
+use chrono::NaiveDate;
 use starlark::environment::GlobalsBuilder;
 use starlark::values::float::StarlarkFloat;
 use starlark::values::tuple::AllocTuple;
 use starlark::values::{Value, ValueLike};
-#[allow(deprecated)]
-use sunrise::sunrise_sunset;
+use sunrise::{Coordinates, SolarDay, SolarEvent};
 
 use crate::starlark_time::StarlarkTime;
+
+fn sunrise_sunset(lat: f64, lng: f64, year: i32, month: u32, day: u32) -> anyhow::Result<(i64, i64)> {
+    let coord = Coordinates::new(lat, lng)
+        .ok_or_else(|| anyhow::anyhow!("invalid coordinates: ({}, {})", lat, lng))?;
+    let date = NaiveDate::from_ymd_opt(year, month, day)
+        .ok_or_else(|| anyhow::anyhow!("invalid date: {}-{}-{}", year, month, day))?;
+    let solar_day = SolarDay::new(coord, date);
+    let rise = solar_day
+        .event_time(SolarEvent::Sunrise)
+        .ok_or_else(|| anyhow::anyhow!("no sunrise"))?
+        .timestamp();
+    let set = solar_day
+        .event_time(SolarEvent::Sunset)
+        .ok_or_else(|| anyhow::anyhow!("no sunset"))?
+        .timestamp();
+    Ok((rise, set))
+}
 
 #[starlark::starlark_module]
 pub fn sunrise_module(builder: &mut GlobalsBuilder) {
@@ -19,7 +36,7 @@ pub fn sunrise_module(builder: &mut GlobalsBuilder) {
         let lng = unpack_number(lng)?;
         let time = unpack_time(date)?;
         let (year, month, day, _, _, _) = time.components();
-        let (rise, _) = sunrise_sunset(lat, lng, year as i32, month as u32, day as u32);
+        let (rise, _) = sunrise_sunset(lat, lng, year as i32, month as u32, day as u32)?;
         Ok(eval.heap().alloc(StarlarkTime::from_unix(rise + 1, 0)))
     }
 
@@ -33,7 +50,7 @@ pub fn sunrise_module(builder: &mut GlobalsBuilder) {
         let lng = unpack_number(lng)?;
         let time = unpack_time(date)?;
         let (year, month, day, _, _, _) = time.components();
-        let (_, set) = sunrise_sunset(lat, lng, year as i32, month as u32, day as u32);
+        let (_, set) = sunrise_sunset(lat, lng, year as i32, month as u32, day as u32)?;
         Ok(eval.heap().alloc(StarlarkTime::from_unix(set - 1, 0)))
     }
 
@@ -58,7 +75,7 @@ pub fn sunrise_module(builder: &mut GlobalsBuilder) {
         let (year, month, day, _, _, _) = time.components();
 
         let (morning, evening) = if (elev - (-50.0 / 60.0)).abs() < 1e-6 {
-            let (rise, set) = sunrise_sunset(lat, lng, year as i32, month as u32, day as u32);
+            let (rise, set) = sunrise_sunset(lat, lng, year as i32, month as u32, day as u32)?;
             (Some(rise + 1), Some(set - 1))
         } else {
             let start = crate::starlark_time::datetime_to_unix(year, month, day, 0, 0, 0);
