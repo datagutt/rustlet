@@ -1,3 +1,4 @@
+pub mod completion;
 pub mod config_cmd;
 pub mod create;
 pub mod delete;

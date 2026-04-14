@@ -18,7 +18,7 @@ use util::{collect_star_files, load_applet};
 
 #[derive(Parser)]
 #[command(name = "rustlet", about = "build apps for pixel-based displays")]
-struct Cli {
+pub(crate) struct Cli {
     #[command(subcommand)]
     command: Commands,
 }
@@ -188,6 +188,18 @@ enum Commands {
     /// `manifest.yaml` and a `<slug>.star` stub alongside. Run this after
     /// `mkdir myapp && cd myapp`.
     Create,
+
+    /// Print a shell completion script to stdout.
+    ///
+    /// Install examples:
+    ///   bash: `rustlet completion bash > /etc/bash_completion.d/rustlet`
+    ///   zsh:  `rustlet completion zsh  > "${fpath[1]}/_rustlet"`
+    ///   fish: `rustlet completion fish > ~/.config/fish/completions/rustlet.fish`
+    Completion {
+        /// Target shell.
+        #[arg(value_enum)]
+        shell: clap_complete::Shell,
+    },
 
     /// Run a dev server with live reload for a .star file or app directory.
     ///
@@ -500,6 +512,9 @@ fn run() -> Result<ExitCode> {
         }
         Commands::Create => {
             commands::create::run()?;
+        }
+        Commands::Completion { shell } => {
+            commands::completion::run(shell)?;
         }
         Commands::Serve {
             path,
