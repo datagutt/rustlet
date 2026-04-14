@@ -7,5 +7,14 @@ edition = "2021"
 rustlet-render = { path = "../rustlet-render" }
 rustlet-runtime = { path = "../rustlet-runtime" }
 rustlet-encode = { path = "../rustlet-encode", features = ["clap"] }
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "env"] }
 anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9.34"
+ureq = { version = "3.3.0", features = ["json"] }
+base64 = "0.22"
+dirs = "5"
+
+[dev-dependencies]
+tempfile = "3"

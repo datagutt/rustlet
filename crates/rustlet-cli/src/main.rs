@@ -8,6 +8,12 @@ use clap::{Parser, Subcommand, ValueEnum};
 use rustlet_encode::{Filter, OutputFormat};
 use rustlet_runtime::{manifest::Manifest, Applet};
 
+mod api;
+mod commands;
+mod config;
+
+use commands::config_cmd::ConfigAction;
+
 #[derive(Parser)]
 #[command(name = "rustlet", about = "build apps for pixel-based displays")]
 struct Cli {
@@ -100,6 +106,78 @@ enum Commands {
         /// Directory containing Twemoji SVG files (named by codepoint, e.g. 1f600.svg)
         #[arg(long)]
         twemoji_dir: Option<PathBuf>,
+    },
+
+    /// Push a WebP image to a Tronbyt or Tidbyt device.
+    ///
+    /// Reads the image from the given file, or from stdin when the path is `-`.
+    /// Credentials resolve in this order: CLI flag > environment
+    /// (`RUSTLET_URL`, `RUSTLET_TOKEN`) > config file.
+    Push {
+        /// Device ID to push to.
+        device_id: String,
+
+        /// WebP file to push. Use `-` to read from stdin.
+        image: PathBuf,
+
+        /// Keeps the image in rotation under this installation identifier.
+        #[arg(short = 'i', long)]
+        installation_id: Option<String>,
+
+        /// Don't interrupt the current display; just save to the slot.
+        /// Requires --installation-id.
+        #[arg(short = 'b', long)]
+        background: bool,
+
+        /// Base URL of the API (default: from config or RUSTLET_URL).
+        #[arg(long)]
+        url: Option<String>,
+
+        /// API token (default: from config or RUSTLET_TOKEN).
+        #[arg(long, env = config::ENV_TOKEN, hide_env_values = true)]
+        token: Option<String>,
+    },
+
+    /// Delete an installation from a device.
+    Delete {
+        /// Device ID.
+        device_id: String,
+
+        /// Installation ID to remove.
+        installation_id: String,
+
+        #[arg(long)]
+        url: Option<String>,
+
+        #[arg(long, env = config::ENV_TOKEN, hide_env_values = true)]
+        token: Option<String>,
+    },
+
+    /// List devices registered to the configured account.
+    Devices {
+        #[arg(long)]
+        url: Option<String>,
+
+        #[arg(long, env = config::ENV_TOKEN, hide_env_values = true)]
+        token: Option<String>,
+    },
+
+    /// List installations currently on a device.
+    List {
+        /// Device ID.
+        device_id: String,
+
+        #[arg(long)]
+        url: Option<String>,
+
+        #[arg(long, env = config::ENV_TOKEN, hide_env_values = true)]
+        token: Option<String>,
+    },
+
+    /// Read or write the persisted API config.
+    Config {
+        #[command(subcommand)]
+        action: ConfigAction,
     },
 }
 
@@ -430,6 +508,56 @@ fn run() -> Result<ExitCode> {
                     std::io::stdout().write_all(&data)?;
                 }
             }
+        }
+        Commands::Push {
+            device_id,
+            image,
+            installation_id,
+            background,
+            url,
+            token,
+        } => {
+            commands::push::run(commands::push::Args {
+                device_id: &device_id,
+                image: &image,
+                installation_id: installation_id.as_deref(),
+                background,
+                url: url.as_deref(),
+                token: token.as_deref(),
+            })?;
+        }
+        Commands::Delete {
+            device_id,
+            installation_id,
+            url,
+            token,
+        } => {
+            commands::delete::run(commands::delete::Args {
+                device_id: &device_id,
+                installation_id: &installation_id,
+                url: url.as_deref(),
+                token: token.as_deref(),
+            })?;
+        }
+        Commands::Devices { url, token } => {
+            commands::devices::run(commands::devices::Args {
+                url: url.as_deref(),
+                token: token.as_deref(),
+            })?;
+        }
+        Commands::List {
+            device_id,
+            url,
+            token,
+        } => {
+            commands::list::run(commands::list::Args {
+                device_id: &device_id,
+                url: url.as_deref(),
+                token: token.as_deref(),
+            })?;
+        }
+        Commands::Config { action } => {
+            commands::config_cmd::run(action)?;
         }
     }
 
