@@ -10,7 +10,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use axum::{routing::get, Router};
+use axum::{
+    routing::{get, post},
+    Router,
+};
 use tokio::sync::broadcast;
 
 mod handlers;
@@ -94,20 +97,23 @@ async fn run_inner(args: Args) -> Result<()> {
     // short concatenated strings — one allocation per route at startup is
     // fine.
     let prefix_trimmed = prefix.trim_end_matches('/');
-    let root_path: &'static str = if prefix == "/" {
-        "/"
-    } else {
-        Box::leak(format!("{prefix_trimmed}/").into_boxed_str())
+    let leak = |suffix: &str| -> &'static str {
+        Box::leak(format!("{prefix_trimmed}{suffix}").into_boxed_str())
     };
-    let preview_path: &'static str =
-        Box::leak(format!("{prefix_trimmed}/preview.webp").into_boxed_str());
-    let events_path: &'static str =
-        Box::leak(format!("{prefix_trimmed}/events").into_boxed_str());
+    let root_path: &'static str = if prefix == "/" { "/" } else { leak("/") };
 
     let app = Router::new()
         .route(root_path, get(handlers::root))
-        .route(preview_path, get(handlers::preview))
-        .route(events_path, get(handlers::events))
+        .route(leak("/events"), get(handlers::events))
+        .route(leak("/preview.webp"), get(handlers::preview_legacy))
+        .route(leak("/api/v1/preview"), post(handlers::api_preview))
+        .route(leak("/api/v1/preview.webp"), post(handlers::api_preview_webp))
+        .route(leak("/api/v1/preview.gif"), post(handlers::api_preview_gif))
+        .route(leak("/api/v1/schema"), get(handlers::api_schema))
+        .route(
+            leak("/api/v1/handlers/{handler_name}"),
+            post(handlers::api_handler),
+        )
         .with_state(state);
 
     let host: IpAddr = args

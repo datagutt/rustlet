@@ -232,6 +232,63 @@ impl Applet {
         profile.gen().map_err(|e| anyhow!("{e}"))
     }
 
+    /// Invoke a named starlark handler function defined in an applet module.
+    ///
+    /// Used by serve's schema form to power `typeahead`, `locationbased`, and
+    /// `generated` schema field types. The handler is looked up in the
+    /// module's globals by name and called with `(config, param)`. The return
+    /// value is serialized to JSON via the existing starlark-to-serde bridge.
+    ///
+    /// Mirrors pixlet's `applet.CallSchemaHandler`.
+    pub fn call_schema_handler(
+        &self,
+        id: &str,
+        src: &str,
+        base_dir: Option<&Path>,
+        handler_name: &str,
+        config: &HashMap<String, String>,
+        param: &str,
+    ) -> Result<String> {
+        seed_for_execution(id);
+        set_request_context(id);
+        set_render_context(false);
+        set_secret_decrypter(None);
+
+        let registry = BuiltinModuleRegistry::new(64, 32, false)?;
+        let ast = AstModule::parse(
+            id,
+            preprocess_starlark_source(src),
+            &Dialect::AllOptionsInternal,
+        )
+        .map_err(|e| anyhow!("{e}"))?;
+
+        let module = Module::new();
+        let loader = registry.loader(&self.globals, base_dir);
+
+        let mut eval = Evaluator::new(&module);
+        eval.set_loader(&loader);
+        eval.set_print_handler(&SILENT_PRINT_HANDLER);
+        eval.eval_module(ast, &self.globals)
+            .map_err(|e| anyhow!("{e}"))?;
+
+        let handler_val = module.get(handler_name).ok_or_else(|| {
+            anyhow!("script does not define a `{handler_name}` handler function")
+        })?;
+
+        let heap = module.heap();
+        let config_val = heap.alloc(StarlarkConfig {
+            entries: config.clone(),
+        });
+        let param_val = heap.alloc(param);
+
+        let result = eval
+            .eval_function(handler_val, &[config_val, param_val], &[])
+            .map_err(|e| anyhow!("{e}"))?;
+
+        let as_json = crate::json_module::starlark_to_serde(result)?;
+        Ok(serde_json::to_string(&as_json)?)
+    }
+
     /// Parse a `.star` source file and return any syntax errors without executing
     /// it. Used by `rustlet lint` to catch malformed files quickly.
     pub fn parse_source(&self, id: &str, src: &str) -> Result<()> {
