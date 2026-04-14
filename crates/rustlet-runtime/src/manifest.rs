@@ -169,6 +169,42 @@ pub fn validate_author(author: &str) -> Result<()> {
     Ok(())
 }
 
+/// Port of pixlet's `GenerateID`. Produces a dashed slug for use as the
+/// manifest `id` field. Underscores become dashes and all whitespace runs
+/// collapse to single dashes.
+pub fn generate_id(name: &str) -> String {
+    let replaced = name.replace('_', "-");
+    replaced
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join("-")
+        .to_lowercase()
+}
+
+/// Port of pixlet's `GenerateDirName`. Used for the generated app's package
+/// name. Strips dashes and underscores entirely then joins the words.
+pub fn generate_dir_name(name: &str) -> String {
+    let stripped = name.replace(['-', '_'], "");
+    stripped
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join("")
+        .to_lowercase()
+}
+
+/// Port of pixlet's `GenerateFileName`. Produces the `.star` filename for a
+/// new app. Dashes become underscores, whitespace runs collapse to single
+/// underscores.
+pub fn generate_file_name(name: &str) -> String {
+    let replaced = name.replace('-', "_");
+    let joined = replaced
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join("_")
+        .to_lowercase();
+    format!("{joined}.star")
+}
+
 /// Port of pixlet's `titleCase`: capitalize each word except for a short list
 /// of articles and prepositions when they appear in the middle of the title.
 pub fn title_case(input: &str) -> String {
@@ -226,6 +262,30 @@ mod tests {
     fn valid_desc_ends_in_punct() {
         assert!(validate_desc("Display the time.").is_ok());
         assert!(validate_desc("Display the time").is_err());
+    }
+
+    #[test]
+    fn generate_id_matches_pixlet() {
+        assert_eq!(generate_id("Cool App"), "cool-app");
+        assert_eq!(generate_id("CoolApp"), "coolapp");
+        assert_eq!(generate_id("cool-app"), "cool-app");
+        assert_eq!(generate_id("cool_app"), "cool-app");
+    }
+
+    #[test]
+    fn generate_dir_name_matches_pixlet() {
+        assert_eq!(generate_dir_name("Cool App"), "coolapp");
+        assert_eq!(generate_dir_name("CoolApp"), "coolapp");
+        assert_eq!(generate_dir_name("cool-app"), "coolapp");
+        assert_eq!(generate_dir_name("cool_app"), "coolapp");
+    }
+
+    #[test]
+    fn generate_file_name_matches_pixlet() {
+        assert_eq!(generate_file_name("Cool App"), "cool_app.star");
+        assert_eq!(generate_file_name("CoolApp"), "coolapp.star");
+        assert_eq!(generate_file_name("cool-app"), "cool_app.star");
+        assert_eq!(generate_file_name("cool_app"), "cool_app.star");
     }
 
     #[test]

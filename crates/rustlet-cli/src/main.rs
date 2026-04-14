@@ -182,6 +182,13 @@ enum Commands {
         action: ConfigAction,
     },
 
+    /// Create a new applet in the current working directory.
+    ///
+    /// Prompts for the app name, summary, description and author, then writes
+    /// `manifest.yaml` and a `<slug>.star` stub alongside. Run this after
+    /// `mkdir myapp && cd myapp`.
+    Create,
+
     /// Run a dev server with live reload for a .star file or app directory.
     ///
     /// Watches the applet for changes and pushes a Server-Sent Event to the
@@ -490,6 +497,9 @@ fn run() -> Result<ExitCode> {
         }
         Commands::Config { action } => {
             commands::config_cmd::run(action)?;
+        }
+        Commands::Create => {
+            commands::create::run()?;
         }
         Commands::Serve {
             path,

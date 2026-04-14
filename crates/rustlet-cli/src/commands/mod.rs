@@ -1,4 +1,5 @@
 pub mod config_cmd;
+pub mod create;
 pub mod delete;
 pub mod devices;
 pub mod list;
