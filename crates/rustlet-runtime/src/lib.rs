@@ -45,3 +45,4 @@ pub use applet::{Applet, AppletRunOptions};
 pub use manifest::Manifest;
 pub use cache_module::{init_cache, InMemoryCache};
 pub use secret_module::{SecretDecryptionKey, SecretEncryptionKey};
+pub use starlark::eval::{ProfileData, ProfileMode};

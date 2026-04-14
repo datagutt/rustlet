@@ -3,7 +3,7 @@ use std::path::Path;
 
 use anyhow::{anyhow, Result};
 use starlark::environment::{Globals, GlobalsBuilder, LibraryExtension, Module};
-use starlark::eval::Evaluator;
+use starlark::eval::{Evaluator, ProfileMode};
 use starlark::syntax::{AstModule, Dialect};
 use starlark::values::ValueLike;
 use starlark::PrintHandler;
@@ -174,6 +174,62 @@ impl Applet {
             .map_err(|e| anyhow!("{e}"))?;
 
         extract_roots(result)
+    }
+
+    /// Run an applet with a starlark profiler attached and return the rendered
+    /// profile data as a string (CSV or flamegraph format depending on mode).
+    ///
+    /// Mirrors pixlet's `profile` command, but the output format is whatever
+    /// starlark-rust emits for the requested mode — not pprof protobuf.
+    pub fn profile(
+        &self,
+        id: &str,
+        src: &str,
+        config: &HashMap<String, String>,
+        options: AppletRunOptions<'_>,
+        mode: &ProfileMode,
+    ) -> Result<String> {
+        seed_for_execution(id);
+        set_request_context(id);
+        set_render_context(options.is_2x);
+        set_secret_decrypter(None);
+
+        let registry = BuiltinModuleRegistry::new(options.width, options.height, options.is_2x)?;
+        let ast = AstModule::parse(
+            id,
+            preprocess_starlark_source(src),
+            &Dialect::AllOptionsInternal,
+        )
+        .map_err(|e| anyhow!("{e}"))?;
+
+        let module = Module::new();
+        let loader = registry.loader(&self.globals, options.base_dir);
+
+        let mut eval = Evaluator::new(&module);
+        eval.set_loader(&loader);
+        if options.silent {
+            eval.set_print_handler(&SILENT_PRINT_HANDLER);
+        } else {
+            eval.set_print_handler(&STDOUT_PRINT_HANDLER);
+        }
+        eval.enable_profile(mode).map_err(|e| anyhow!("{e}"))?;
+
+        eval.eval_module(ast, &self.globals)
+            .map_err(|e| anyhow!("{e}"))?;
+
+        let main_val = module
+            .get("main")
+            .ok_or_else(|| anyhow!("script does not define a `main` function"))?;
+
+        let heap = module.heap();
+        let config_val = heap.alloc(StarlarkConfig {
+            entries: config.clone(),
+        });
+        eval.eval_function(main_val, &[config_val], &[])
+            .map_err(|e| anyhow!("{e}"))?;
+
+        let profile = eval.gen_profile().map_err(|e| anyhow!("{e}"))?;
+        profile.gen().map_err(|e| anyhow!("{e}"))
     }
 
     /// Parse a `.star` source file and return any syntax errors without executing

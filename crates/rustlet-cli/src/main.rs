@@ -272,6 +272,59 @@ enum Commands {
         action: CommunityAction,
     },
 
+    /// Profile an applet's starlark execution.
+    ///
+    /// Unlike pixlet's pprof-based profile output, rustlet emits
+    /// starlark-rust's native profile format (CSV, flamegraph, statement
+    /// trace) depending on the chosen --mode. The default
+    /// `heap-summary-allocated` is the closest equivalent to pixlet's
+    /// default output.
+    Profile {
+        /// Path to the .star file or app directory, plus optional
+        /// `KEY=VALUE` config overrides.
+        #[arg(value_name = "PATH | KEY=VALUE")]
+        args: Vec<String>,
+
+        /// JSON config file.
+        #[arg(short = 'c', long)]
+        config: Option<PathBuf>,
+
+        /// Profile mode. Valid values match starlark-rust's `ProfileMode`:
+        /// heap-summary-allocated, heap-summary-retained, heap-flame-allocated,
+        /// heap-flame-retained, statement, coverage, bytecode, bytecode-pairs,
+        /// time-flame, typecheck.
+        #[arg(long, default_value = "heap-summary-allocated")]
+        mode: String,
+
+        /// Output path for the profile data. Use `-` for stdout.
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Silence starlark print() output.
+        #[arg(long)]
+        silent: bool,
+
+        /// Wall-clock timeout for the profiled run.
+        #[arg(long, default_value = "30s")]
+        timeout: humantime::Duration,
+
+        /// BCP47 locale tag.
+        #[arg(long)]
+        locale: Option<String>,
+
+        /// Display width.
+        #[arg(short = 'w', long, default_value_t = 64)]
+        width: u32,
+
+        /// Display height.
+        #[arg(short = 't', long, default_value_t = 32)]
+        height: u32,
+
+        /// Double the canvas.
+        #[arg(short = '2', long = "2x")]
+        double: bool,
+    },
+
     /// Run a dev server with live reload for a .star file or app directory.
     ///
     /// Watches the applet for changes and pushes a Server-Sent Event to the
@@ -657,6 +710,31 @@ fn run() -> Result<ExitCode> {
         }
         Commands::Community { action } => {
             commands::community::run(action)?;
+        }
+        Commands::Profile {
+            args,
+            config,
+            mode,
+            output,
+            silent,
+            timeout,
+            locale,
+            width,
+            height,
+            double,
+        } => {
+            commands::profile::run(commands::profile::Args {
+                positional: args,
+                config_file: config,
+                mode,
+                output,
+                silent,
+                timeout: timeout.into(),
+                locale,
+                width,
+                height,
+                is_2x: double,
+            })?;
         }
         Commands::Completion { shell } => {
             commands::completion::run(shell)?;
