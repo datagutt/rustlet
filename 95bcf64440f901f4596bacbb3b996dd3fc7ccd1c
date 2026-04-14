@@ -1,0 +1,41 @@
+crates/rustlet-cli/src/commands/community/validate_manifest.rs
+  973ace9ed2710459 1-20
+crates/rustlet-encode/src/filter.rs
+  973ace9ed2710459 27-85
+crates/rustlet-cli/src/commands/community/mod.rs
+  973ace9ed2710459 1-56
+crates/rustlet-cli/src/commands/community/list_color_filters.rs
+  973ace9ed2710459 1-10
+crates/rustlet-cli/src/commands/mod.rs
+  973ace9ed2710459 2
+crates/rustlet-cli/src/commands/community/validate_icons.rs
+  973ace9ed2710459 1-89
+crates/rustlet-cli/src/main.rs
+  973ace9ed2710459 15,268-274,658-660
+crates/rustlet-cli/src/commands/community/list_fonts.rs
+  973ace9ed2710459 1-35
+crates/rustlet-cli/src/commands/community/load_app.rs
+  973ace9ed2710459 1-23
+crates/rustlet-cli/src/commands/community/list_icons.rs
+  973ace9ed2710459 1-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "95bcf64440f901f4596bacbb3b996dd3fc7ccd1c",
+  "prompts": {
+    "973ace9ed2710459": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2864ead3-89b8-4dcf-9f60-7c4793cc0f63",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "datagutt",
+      "messages": [],
+      "total_additions": 322,
+      "total_deletions": 3,
+      "accepted_lines": 319,
+      "overriden_lines": 0
+    }
+  }
+}
