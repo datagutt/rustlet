@@ -366,16 +366,45 @@ enum Commands {
         port: u16,
 
         /// Display width in pixels.
-        #[arg(long, default_value_t = 64)]
+        #[arg(short = 'w', long, default_value_t = 64)]
         width: u32,
 
         /// Display height in pixels.
-        #[arg(long, default_value_t = 32)]
+        #[arg(short = 't', long, default_value_t = 32)]
         height: u32,
 
         /// Don't open a browser window on start.
         #[arg(long)]
         no_browser: bool,
+
+        /// Watch the applet directory for changes and fire SSE reloads.
+        #[arg(long, default_value_t = true, num_args = 0..=1, default_missing_value = "true")]
+        watch: bool,
+
+        /// Maximum animation length for each rendered preview.
+        #[arg(short = 'd', long, default_value = "15s")]
+        max_duration: humantime::Duration,
+
+        /// Wall-clock timeout for each render request.
+        #[arg(long, default_value = "30s")]
+        timeout: humantime::Duration,
+
+        /// URL path prefix to serve under. Normalized to `/foo/`.
+        #[arg(long, default_value = "/")]
+        url_path: String,
+
+        /// JSON file to persist config values into. Rewritten on every
+        /// successful preview. Reserved for phase 8's schema form.
+        #[arg(short = 'o', long)]
+        save_config: Option<PathBuf>,
+
+        /// Force 2x canvas (128x64). Overrides manifest auto-detection.
+        #[arg(short = '2', long = "2x")]
+        double: bool,
+
+        /// WebP lossless preset level (0..=9).
+        #[arg(short = 'z', long, value_parser = clap::value_parser!(u8).range(0..=9))]
+        webp_level: Option<u8>,
     },
 }
 
@@ -785,6 +814,13 @@ fn run() -> Result<ExitCode> {
             width,
             height,
             no_browser,
+            watch,
+            max_duration,
+            timeout,
+            url_path,
+            save_config,
+            double,
+            webp_level,
         } => {
             commands::serve::run(commands::serve::Args {
                 path,
@@ -793,6 +829,13 @@ fn run() -> Result<ExitCode> {
                 width,
                 height,
                 no_browser,
+                watch,
+                max_duration: max_duration.into(),
+                timeout: timeout.into(),
+                path_prefix: url_path,
+                save_config,
+                is_2x: double,
+                webp_level,
             })?;
         }
     }

@@ -27,6 +27,13 @@ pub struct Args {
     pub width: u32,
     pub height: u32,
     pub no_browser: bool,
+    pub watch: bool,
+    pub max_duration: Duration,
+    pub timeout: Duration,
+    pub path_prefix: String,
+    pub save_config: Option<PathBuf>,
+    pub is_2x: bool,
+    pub webp_level: Option<u8>,
 }
 
 pub fn run(args: Args) -> Result<()> {
@@ -37,25 +44,70 @@ pub fn run(args: Args) -> Result<()> {
     rt.block_on(run_inner(args))
 }
 
+/// Normalize the user-provided path prefix into a `/foo/` shape. Matches
+/// pixlet's browser.go:102-107.
+fn normalize_prefix(raw: &str) -> String {
+    let mut s = raw.trim().to_string();
+    if s.is_empty() || s == "/" {
+        return "/".to_string();
+    }
+    if !s.starts_with('/') {
+        s.insert(0, '/');
+    }
+    if !s.ends_with('/') {
+        s.push('/');
+    }
+    s
+}
+
 async fn run_inner(args: Args) -> Result<()> {
     if !args.path.exists() {
         anyhow::bail!("path does not exist: {}", args.path.display());
     }
+
+    if let Some(level) = args.webp_level {
+        rustlet_encode::set_webp_level(level);
+    }
+
+    let prefix = normalize_prefix(&args.path_prefix);
 
     let (reload_tx, _) = broadcast::channel::<()>(16);
     let state: SharedState = Arc::new(AppState {
         applet_path: args.path.clone(),
         width: args.width,
         height: args.height,
+        is_2x: args.is_2x,
+        max_duration: args.max_duration,
+        timeout: args.timeout,
+        save_config: args.save_config,
         reload_tx,
     });
 
-    watcher::spawn(state.clone())?;
+    if args.watch {
+        watcher::spawn(state.clone())?;
+    }
+
+    // Build routes with the prefix baked into each path. axum 0.8's `nest`
+    // does not forward requests to a root `/` route inside the nested
+    // router, so we concatenate the prefix with each route's suffix
+    // manually. The `&'static str` requirement is satisfied by leaking the
+    // short concatenated strings — one allocation per route at startup is
+    // fine.
+    let prefix_trimmed = prefix.trim_end_matches('/');
+    let root_path: &'static str = if prefix == "/" {
+        "/"
+    } else {
+        Box::leak(format!("{prefix_trimmed}/").into_boxed_str())
+    };
+    let preview_path: &'static str =
+        Box::leak(format!("{prefix_trimmed}/preview.webp").into_boxed_str());
+    let events_path: &'static str =
+        Box::leak(format!("{prefix_trimmed}/events").into_boxed_str());
 
     let app = Router::new()
-        .route("/", get(handlers::root))
-        .route("/preview.webp", get(handlers::preview))
-        .route("/events", get(handlers::events))
+        .route(root_path, get(handlers::root))
+        .route(preview_path, get(handlers::preview))
+        .route(events_path, get(handlers::events))
         .with_state(state);
 
     let host: IpAddr = args
@@ -67,7 +119,7 @@ async fn run_inner(args: Args) -> Result<()> {
         .await
         .with_context(|| format!("binding {addr}"))?;
     let bound = listener.local_addr()?;
-    let url = format!("http://{}:{}/", bound.ip(), bound.port());
+    let url = format!("http://{}:{}{}", bound.ip(), bound.port(), prefix);
     eprintln!("serving {} at {url}", args.path.display());
 
     if !args.no_browser {
@@ -88,6 +140,21 @@ async fn run_inner(args: Args) -> Result<()> {
         .context("axum serve failed")?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_prefix_shapes() {
+        assert_eq!(normalize_prefix(""), "/");
+        assert_eq!(normalize_prefix("/"), "/");
+        assert_eq!(normalize_prefix("foo"), "/foo/");
+        assert_eq!(normalize_prefix("/foo"), "/foo/");
+        assert_eq!(normalize_prefix("foo/"), "/foo/");
+        assert_eq!(normalize_prefix("/foo/"), "/foo/");
+    }
 }
 
 async fn shutdown_signal() {

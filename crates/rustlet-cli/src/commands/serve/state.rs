@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
 use tokio::sync::broadcast;
 
@@ -9,6 +10,10 @@ pub struct AppState {
     pub applet_path: PathBuf,
     pub width: u32,
     pub height: u32,
+    pub is_2x: bool,
+    pub max_duration: Duration,
+    pub timeout: Duration,
+    pub save_config: Option<PathBuf>,
     pub reload_tx: broadcast::Sender<()>,
 }
 

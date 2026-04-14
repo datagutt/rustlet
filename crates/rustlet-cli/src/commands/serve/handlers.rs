@@ -10,7 +10,6 @@
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::path::Path;
-use std::time::Duration;
 
 use anyhow::{anyhow, Result};
 use axum::{
@@ -26,8 +25,6 @@ use super::state::SharedState;
 use super::templates::INDEX_HTML;
 use crate::util::{render_bytes, RenderBytesOptions};
 
-const RENDER_TIMEOUT: Duration = Duration::from_secs(30);
-
 pub async fn root(State(state): State<SharedState>) -> Html<String> {
     let body = INDEX_HTML.replace("{path}", &state.applet_path.display().to_string());
     Html(body)
@@ -37,24 +34,44 @@ pub async fn preview(State(state): State<SharedState>) -> Response {
     let path = state.applet_path.clone();
     let width = state.width;
     let height = state.height;
+    let is_2x = state.is_2x;
+    let max_duration = Some(state.max_duration);
+    let timeout = state.timeout;
+    let save_config = state.save_config.clone();
 
-    let join = tokio::task::spawn_blocking(move || render_once(&path, width, height));
+    let join = tokio::task::spawn_blocking(move || {
+        render_once(&path, width, height, is_2x, max_duration)
+    });
 
-    match tokio::time::timeout(RENDER_TIMEOUT, join).await {
-        Ok(Ok(Ok(bytes))) => Response::builder()
-            .header(header::CONTENT_TYPE, "image/webp")
-            .header(header::CACHE_CONTROL, "no-store")
-            .body(bytes.into())
-            .unwrap(),
-        Ok(Ok(Err(e))) => render_error(StatusCode::INTERNAL_SERVER_ERROR, &e),
-        Ok(Err(join_err)) => render_error(
+    let result = match tokio::time::timeout(timeout, join).await {
+        Ok(Ok(Ok(bytes))) => Ok(bytes),
+        Ok(Ok(Err(e))) => Err((StatusCode::INTERNAL_SERVER_ERROR, e)),
+        Ok(Err(join_err)) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
-            &anyhow!("render task panicked: {join_err}"),
-        ),
-        Err(_elapsed) => render_error(
+            anyhow!("render task panicked: {join_err}"),
+        )),
+        Err(_elapsed) => Err((
             StatusCode::GATEWAY_TIMEOUT,
-            &anyhow!("render exceeded {}s", RENDER_TIMEOUT.as_secs()),
-        ),
+            anyhow!("render exceeded {}s", timeout.as_secs()),
+        )),
+    };
+
+    match result {
+        Ok(bytes) => {
+            // Persist an empty config map so the file exists after first
+            // render. Phase 8 replaces this with the form-submitted config.
+            if let Some(ref path) = save_config {
+                if let Err(e) = std::fs::write(path, b"{}\n") {
+                    eprintln!("could not write save-config {}: {e}", path.display());
+                }
+            }
+            Response::builder()
+                .header(header::CONTENT_TYPE, "image/webp")
+                .header(header::CACHE_CONTROL, "no-store")
+                .body(bytes.into())
+                .unwrap()
+        }
+        Err((status, err)) => render_error(status, &err),
     }
 }
 
@@ -79,13 +96,20 @@ fn render_error(status: StatusCode, err: &anyhow::Error) -> Response {
 /// Thin adapter over the shared [`render_bytes`] helper. Serve always emits
 /// WebP so animated applets work in the browser, and uses an empty config
 /// until phase 8 wires up the schema form.
-fn render_once(path: &Path, width: u32, height: u32) -> Result<Vec<u8>> {
+fn render_once(
+    path: &Path,
+    width: u32,
+    height: u32,
+    is_2x: bool,
+    max_duration: Option<std::time::Duration>,
+) -> Result<Vec<u8>> {
     let opts = RenderBytesOptions {
         width,
         height,
+        is_2x,
         format: OutputFormat::WebP,
         silent: false,
-        max_duration: None,
+        max_duration,
         ..Default::default()
     };
     render_bytes(path, &HashMap::new(), &opts)
