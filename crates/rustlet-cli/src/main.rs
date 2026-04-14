@@ -221,6 +221,30 @@ enum Commands {
         action: ConfigAction,
     },
 
+    /// Run an HTTP render server for use by other tools.
+    ///
+    /// Exposes `POST /api/render` that accepts a JSON body
+    /// `{path, config, width, height, magnify, color_filter, 2x, locale}`
+    /// and returns raw image bytes. The working directory sandboxes the
+    /// path lookup. Mirrors pixlet's `cmd/api.go`.
+    Api {
+        /// Host interface to bind.
+        #[arg(short = 'i', long, default_value = "127.0.0.1")]
+        host: String,
+
+        /// TCP port to listen on.
+        #[arg(short = 'p', long, default_value_t = 8080)]
+        port: u16,
+
+        /// Response image format.
+        #[arg(long, value_enum, default_value_t = Format::Webp)]
+        format: Format,
+
+        /// Silence starlark print() output.
+        #[arg(long)]
+        silent: bool,
+    },
+
     /// Create a new applet in the current working directory.
     ///
     /// Prompts for the app name, summary, description and author, then writes
@@ -603,6 +627,22 @@ fn run() -> Result<ExitCode> {
         }
         Commands::Config { action } => {
             commands::config_cmd::run(action)?;
+        }
+        Commands::Api {
+            host,
+            port,
+            format,
+            silent,
+        } => {
+            commands::api::run(commands::api::Args {
+                host,
+                port,
+                format: match format {
+                    Format::Gif => commands::api::Format::Gif,
+                    Format::Webp => commands::api::Format::Webp,
+                },
+                silent,
+            })?;
         }
         Commands::Create => {
             commands::create::run()?;

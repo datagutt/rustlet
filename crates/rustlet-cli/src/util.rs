@@ -245,6 +245,99 @@ pub fn explicit_output(path: Option<&Path>) -> Option<&Path> {
     }
 }
 
+/// Options for `render_bytes`. Encapsulates every knob the render pipeline
+/// takes today so new callers (api, serve, check, profile) can converge on
+/// one function.
+#[derive(Debug, Clone)]
+pub struct RenderBytesOptions {
+    pub width: u32,
+    pub height: u32,
+    pub magnify: u32,
+    pub is_2x: bool,
+    pub color_filter: rustlet_encode::Filter,
+    pub silent: bool,
+    pub locale: Option<String>,
+    pub format: rustlet_encode::OutputFormat,
+    pub max_duration: Option<Duration>,
+}
+
+impl Default for RenderBytesOptions {
+    fn default() -> Self {
+        Self {
+            width: 64,
+            height: 32,
+            magnify: 1,
+            is_2x: false,
+            color_filter: rustlet_encode::Filter::None,
+            silent: true,
+            locale: None,
+            format: rustlet_encode::OutputFormat::WebP,
+            max_duration: Some(Duration::from_secs(15)),
+        }
+    }
+}
+
+/// End-to-end render pipeline shared by `serve`, `api`, `profile`, and
+/// `check`. Loads the applet at `path`, runs `main(config)`, paints frames,
+/// applies filter + magnify, and encodes to the requested format.
+///
+/// Honors the same 2x auto-demotion pixlet does: if the caller asked for 2x
+/// but the manifest lacks `supports2x`, magnify doubles instead.
+pub fn render_bytes(
+    path: &Path,
+    config: &HashMap<String, String>,
+    opts: &RenderBytesOptions,
+) -> Result<Vec<u8>> {
+    use rustlet_runtime::{Applet, AppletRunOptions};
+
+    let loaded = load_applet(path)?;
+
+    let manifest_supports_2x = loaded
+        .manifest
+        .as_ref()
+        .map(|m| m.supports2x)
+        .unwrap_or(false);
+    let mut is_2x = opts.is_2x || manifest_supports_2x;
+    let mut magnify = opts.magnify;
+    if opts.is_2x && !manifest_supports_2x {
+        is_2x = false;
+        magnify = magnify.saturating_mul(2).max(1);
+    }
+    let (render_width, render_height) = if is_2x {
+        (128, 64)
+    } else {
+        (opts.width, opts.height)
+    };
+
+    let run_opts = AppletRunOptions {
+        width: render_width,
+        height: render_height,
+        is_2x,
+        base_dir: loaded.base_dir.as_deref(),
+        secret_decryption_key: None,
+        silent: opts.silent,
+        locale: opts.locale.clone(),
+    };
+    let applet = Applet::new();
+    let roots = applet
+        .run_with_runtime_options(&loaded.id, &loaded.source, config, run_opts)
+        .context("evaluating applet")?;
+
+    if roots.is_empty() {
+        return Err(anyhow!("main() returned no roots"));
+    }
+
+    let root = roots.into_iter().next().unwrap();
+    let mut frames = root.paint_frames(render_width, render_height);
+    let delay_ms = root.delay as u16;
+
+    rustlet_encode::apply_filter(&mut frames, opts.color_filter);
+    let frames = rustlet_encode::magnify(&frames, magnify);
+
+    rustlet_encode::encode_with_max_duration(&frames, delay_ms, opts.format, opts.max_duration)
+        .context("encoding frames")
+}
+
 /// Build the User-Agent string for all outgoing HTTP traffic.
 ///
 /// Format mirrors pixlet's `pixlet/<version>[-<git7>] (<goos>/<goarch>)` so

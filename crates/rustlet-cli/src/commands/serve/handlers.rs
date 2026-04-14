@@ -9,10 +9,10 @@
 
 use std::collections::HashMap;
 use std::convert::Infallible;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Duration;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use axum::{
     extract::State,
     http::{header, StatusCode},
@@ -20,12 +20,11 @@ use axum::{
 };
 use futures_util::stream::Stream;
 use rustlet_encode::OutputFormat;
-use rustlet_runtime::Applet;
 use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 
 use super::state::SharedState;
 use super::templates::INDEX_HTML;
-use crate::util::load_applet;
+use crate::util::{render_bytes, RenderBytesOptions};
 
 const RENDER_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -77,41 +76,17 @@ fn render_error(status: StatusCode, err: &anyhow::Error) -> Response {
     (status, [(header::CONTENT_TYPE, "text/plain")], body).into_response()
 }
 
-/// Fully synchronous render path. Mirrors the `Commands::Render` arm in
-/// main.rs but always emits WebP so animated applets work in the browser.
+/// Thin adapter over the shared [`render_bytes`] helper. Serve always emits
+/// WebP so animated applets work in the browser, and uses an empty config
+/// until phase 8 wires up the schema form.
 fn render_once(path: &Path, width: u32, height: u32) -> Result<Vec<u8>> {
-    let loaded = load_applet(path)?;
-    // Auto-2x from manifest, matching `render`.
-    let is_2x = loaded
-        .manifest
-        .as_ref()
-        .map(|m| m.supports2x)
-        .unwrap_or(false);
-    let (width, height) = if is_2x { (128, 64) } else { (width, height) };
-
-    let applet = Applet::new();
-    let config = HashMap::new();
-    let base_dir: Option<PathBuf> = loaded.base_dir.clone();
-    let roots = applet
-        .run_with_options(
-            &loaded.id,
-            &loaded.source,
-            &config,
-            width,
-            height,
-            is_2x,
-            base_dir.as_deref(),
-        )
-        .context("evaluating applet")?;
-
-    if roots.is_empty() {
-        return Err(anyhow!("main() returned no roots"));
-    }
-
-    let root = roots.into_iter().next().unwrap();
-    let frames = root.paint_frames(width, height);
-    let delay_ms = root.delay as u16;
-    let data = rustlet_encode::encode(&frames, delay_ms, OutputFormat::WebP)
-        .context("encoding webp")?;
-    Ok(data)
+    let opts = RenderBytesOptions {
+        width,
+        height,
+        format: OutputFormat::WebP,
+        silent: false,
+        max_duration: None,
+        ..Default::default()
+    };
+    render_bytes(path, &HashMap::new(), &opts)
 }
