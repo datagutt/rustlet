@@ -24,6 +24,66 @@ pub enum Filter {
 type ColorMatrix = [[f32; 3]; 3];
 
 impl Filter {
+    /// Every filter in registration order. Useful for listing commands.
+    pub const ALL: &'static [Filter] = &[
+        Filter::None,
+        Filter::Dimmed,
+        Filter::RedShift,
+        Filter::Warm,
+        Filter::Sunset,
+        Filter::Sepia,
+        Filter::Vintage,
+        Filter::Dusk,
+        Filter::Cool,
+        Filter::BW,
+        Filter::Ice,
+        Filter::Moonlight,
+        Filter::Neon,
+        Filter::Pastel,
+    ];
+
+    /// Kebab-case name suitable for CLI and serde use.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Filter::None => "none",
+            Filter::Dimmed => "dimmed",
+            Filter::RedShift => "red-shift",
+            Filter::Warm => "warm",
+            Filter::Sunset => "sunset",
+            Filter::Sepia => "sepia",
+            Filter::Vintage => "vintage",
+            Filter::Dusk => "dusk",
+            Filter::Cool => "cool",
+            Filter::BW => "bw",
+            Filter::Ice => "ice",
+            Filter::Moonlight => "moonlight",
+            Filter::Neon => "neon",
+            Filter::Pastel => "pastel",
+        }
+    }
+
+    /// Short human description used by `community list-color-filters`.
+    pub fn describe(&self) -> &'static str {
+        match self {
+            Filter::None => "No transformation (identity matrix).",
+            Filter::Dimmed => "Quarter-brightness for late-night displays.",
+            Filter::RedShift => "Warm chromatic shift approximating a 3400K whitepoint.",
+            Filter::Warm => "Gentle warm tint without clipping highlights.",
+            Filter::Sunset => "Orange and red cast emulating golden hour.",
+            Filter::Sepia => "Classic sepia tone conversion.",
+            Filter::Vintage => "Faded, low contrast vintage look.",
+            Filter::Dusk => "Cool desaturated twilight palette.",
+            Filter::Cool => "Gentle cool tint without clipping shadows.",
+            Filter::BW => "Perceptual luminance grayscale (black and white).",
+            Filter::Ice => "Icy blue and white wash.",
+            Filter::Moonlight => "Low saturation cool moonlight tone.",
+            Filter::Neon => "High saturation punchy neon palette.",
+            Filter::Pastel => "Soft pastel low contrast palette.",
+        }
+    }
+}
+
+impl Filter {
     fn matrix(self) -> ColorMatrix {
         match self {
             Filter::None => [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],

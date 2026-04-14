@@ -12,6 +12,7 @@ mod commands;
 mod config;
 mod util;
 
+use commands::community::CommunityAction;
 use commands::config_cmd::ConfigAction;
 use util::{
     collect_star_files, default_output_path, explicit_output, load_applet, parse_config_args,
@@ -262,6 +263,13 @@ enum Commands {
         /// Target shell.
         #[arg(value_enum)]
         shell: clap_complete::Shell,
+    },
+
+    /// Tronbyt community helpers: manifest validation, asset listings, app
+    /// loading. Parity with pixlet's `community` subcommand group.
+    Community {
+        #[command(subcommand)]
+        action: CommunityAction,
     },
 
     /// Run a dev server with live reload for a .star file or app directory.
@@ -646,6 +654,9 @@ fn run() -> Result<ExitCode> {
         }
         Commands::Create => {
             commands::create::run()?;
+        }
+        Commands::Community { action } => {
+            commands::community::run(action)?;
         }
         Commands::Completion { shell } => {
             commands::completion::run(shell)?;
