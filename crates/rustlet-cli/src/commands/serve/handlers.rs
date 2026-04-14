@@ -207,6 +207,123 @@ pub async fn api_schema(State(state): State<SharedState>) -> Response {
     }
 }
 
+// ----- /api/v1/push -----
+
+#[derive(Debug, Deserialize)]
+pub struct PushRequest {
+    #[serde(default, rename = "deviceID", alias = "deviceId")]
+    pub device_id: String,
+    #[serde(default, rename = "apiToken")]
+    pub api_token: String,
+    #[serde(default, rename = "installationID", alias = "installationId")]
+    pub installation_id: String,
+    /// Pixlet sends this as a string "true"/"false". Accept either.
+    #[serde(default)]
+    pub background: StringBool,
+    /// Override the default base URL (e.g. for Tronbyt). When empty the
+    /// api::Client's `url` argument is treated as required; we surface an
+    /// error to the caller.
+    #[serde(default)]
+    pub url: Option<String>,
+    /// Every other field in the body is treated as a config override.
+    #[serde(flatten)]
+    pub extra: HashMap<String, Value>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(untagged)]
+pub enum StringBool {
+    Bool(bool),
+    Str(String),
+    #[default]
+    #[serde(skip)]
+    Unset,
+}
+
+impl StringBool {
+    fn as_bool(&self) -> bool {
+        match self {
+            StringBool::Bool(b) => *b,
+            StringBool::Str(s) => s == "true",
+            StringBool::Unset => false,
+        }
+    }
+}
+
+pub async fn api_push(
+    State(state): State<SharedState>,
+    Json(req): Json<PushRequest>,
+) -> Response {
+    if req.device_id.is_empty() {
+        return bad_request(&anyhow!("deviceID is required"));
+    }
+    if req.api_token.is_empty() {
+        return bad_request(&anyhow!("apiToken is required"));
+    }
+
+    // Merge any extra config fields into a string map for the render.
+    let mut config: HashMap<String, String> = HashMap::new();
+    for (k, v) in req.extra {
+        if let Some(s) = v.as_str() {
+            config.insert(k, s.to_string());
+        } else {
+            config.insert(k, v.to_string());
+        }
+    }
+    let stripped = strip_meta_keys(&config);
+
+    // Render the current frame with the supplied config.
+    let path = state.applet_path.clone();
+    let width = state.width;
+    let height = state.height;
+    let is_2x = state.is_2x;
+    let max_duration = Some(state.max_duration);
+    let timeout = state.timeout;
+
+    let render_join = tokio::task::spawn_blocking(move || {
+        render_config(&path, &stripped, width, height, is_2x, OutputFormat::WebP, max_duration)
+    });
+    let bytes = match tokio::time::timeout(timeout, render_join).await {
+        Ok(Ok(Ok(b))) => b,
+        Ok(Ok(Err(e))) => return render_error(StatusCode::INTERNAL_SERVER_ERROR, &e),
+        Ok(Err(j)) => {
+            return render_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                &anyhow!("render task panicked: {j}"),
+            );
+        }
+        Err(_) => {
+            return render_error(
+                StatusCode::GATEWAY_TIMEOUT,
+                &anyhow!("render exceeded {}s", timeout.as_secs()),
+            );
+        }
+    };
+
+    // Fall through to the api::Client on a blocking thread (ureq is sync).
+    let url = match req.url.filter(|s| !s.is_empty()) {
+        Some(u) => u,
+        None => "https://api.tidbyt.com".to_string(),
+    };
+    let token = req.api_token;
+    let device_id = req.device_id;
+    let installation_id = (!req.installation_id.is_empty()).then_some(req.installation_id);
+    let background = req.background.as_bool();
+
+    let push_join = tokio::task::spawn_blocking(move || -> Result<()> {
+        let client = crate::api::Client::new(&url, &token)?;
+        client.push(&device_id, &bytes, installation_id.as_deref(), background)
+    });
+    match push_join.await {
+        Ok(Ok(())) => (StatusCode::OK, "pushed").into_response(),
+        Ok(Err(e)) => (StatusCode::BAD_GATEWAY, format!("push failed: {e:#}")).into_response(),
+        Err(j) => render_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            &anyhow!("push task panicked: {j}"),
+        ),
+    }
+}
+
 // ----- /api/v1/handlers/{handler_name} -----
 
 #[derive(Debug, Deserialize)]

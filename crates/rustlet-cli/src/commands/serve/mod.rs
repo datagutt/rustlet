@@ -110,6 +110,7 @@ async fn run_inner(args: Args) -> Result<()> {
         .route(leak("/api/v1/preview.webp"), post(handlers::api_preview_webp))
         .route(leak("/api/v1/preview.gif"), post(handlers::api_preview_gif))
         .route(leak("/api/v1/schema"), get(handlers::api_schema))
+        .route(leak("/api/v1/push"), post(handlers::api_push))
         .route(
             leak("/api/v1/handlers/{handler_name}"),
             post(handlers::api_handler),
