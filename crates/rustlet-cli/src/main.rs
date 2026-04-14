@@ -202,6 +202,11 @@ enum Commands {
 
         #[arg(long, env = config::ENV_TOKEN, hide_env_values = true)]
         token: Option<String>,
+
+        /// Emit one device id per line (no display name). Used by dynamic
+        /// shell completion; useful for scripting.
+        #[arg(long)]
+        ids_only: bool,
     },
 
     /// List installations currently on a device.
@@ -214,6 +219,11 @@ enum Commands {
 
         #[arg(long, env = config::ENV_TOKEN, hide_env_values = true)]
         token: Option<String>,
+
+        /// Emit one installation id per line. Used by dynamic shell
+        /// completion and scripting.
+        #[arg(long)]
+        ids_only: bool,
     },
 
     /// Read or write the persisted API config.
@@ -259,10 +269,19 @@ enum Commands {
     ///   bash: `rustlet completion bash > /etc/bash_completion.d/rustlet`
     ///   zsh:  `rustlet completion zsh  > "${fpath[1]}/_rustlet"`
     ///   fish: `rustlet completion fish > ~/.config/fish/completions/rustlet.fish`
+    ///
+    /// With --dynamic the script also registers callbacks that query the
+    /// configured tronbyt for live device and installation ids when
+    /// completing push/delete/list positional args. bash, zsh, and fish are
+    /// supported; other shells fall back to the static completion.
     Completion {
         /// Target shell.
         #[arg(value_enum)]
         shell: clap_complete::Shell,
+
+        /// Append dynamic device-id completion hooks.
+        #[arg(long)]
+        dynamic: bool,
     },
 
     /// Tronbyt community helpers: manifest validation, asset listings, app
@@ -719,21 +738,36 @@ fn run() -> Result<ExitCode> {
                 token: token.as_deref(),
             })?;
         }
-        Commands::Devices { url, token } => {
+        Commands::Devices {
+            url,
+            token,
+            ids_only,
+        } => {
             commands::devices::run(commands::devices::Args {
                 url: url.as_deref(),
                 token: token.as_deref(),
+                format: if ids_only {
+                    commands::devices::OutputFormat::IdsOnly
+                } else {
+                    commands::devices::OutputFormat::Tsv
+                },
             })?;
         }
         Commands::List {
             device_id,
             url,
             token,
+            ids_only,
         } => {
             commands::list::run(commands::list::Args {
                 device_id: &device_id,
                 url: url.as_deref(),
                 token: token.as_deref(),
+                format: if ids_only {
+                    commands::devices::OutputFormat::IdsOnly
+                } else {
+                    commands::devices::OutputFormat::Tsv
+                },
             })?;
         }
         Commands::Config { action } => {
@@ -804,8 +838,8 @@ fn run() -> Result<ExitCode> {
                 is_2x: double,
             })?;
         }
-        Commands::Completion { shell } => {
-            commands::completion::run(shell)?;
+        Commands::Completion { shell, dynamic } => {
+            commands::completion::run(shell, dynamic)?;
         }
         Commands::Serve {
             path,

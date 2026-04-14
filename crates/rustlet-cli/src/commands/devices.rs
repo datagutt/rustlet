@@ -6,6 +6,15 @@ use crate::config;
 pub struct Args<'a> {
     pub url: Option<&'a str>,
     pub token: Option<&'a str>,
+    pub format: OutputFormat,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum OutputFormat {
+    /// Tab-separated `id\tdisplay_name` per line.
+    Tsv,
+    /// One device id per line. Used by shell completion.
+    IdsOnly,
 }
 
 pub fn run(args: Args<'_>) -> Result<()> {
@@ -13,11 +22,16 @@ pub fn run(args: Args<'_>) -> Result<()> {
     let client = Client::new(&url, &token)?;
     let devices = client.devices()?;
     if devices.is_empty() {
-        eprintln!("no devices found");
+        if matches!(args.format, OutputFormat::Tsv) {
+            eprintln!("no devices found");
+        }
         return Ok(());
     }
     for d in devices {
-        println!("{}\t{}", d.id, d.display_name);
+        match args.format {
+            OutputFormat::Tsv => println!("{}\t{}", d.id, d.display_name),
+            OutputFormat::IdsOnly => println!("{}", d.id),
+        }
     }
     Ok(())
 }
