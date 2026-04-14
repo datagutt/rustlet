@@ -34,12 +34,30 @@ impl PrintHandler for SilentPrintHandler {
 
 pub(crate) static SILENT_PRINT_HANDLER: SilentPrintHandler = SilentPrintHandler;
 
+pub(crate) struct StdoutPrintHandler;
+
+impl PrintHandler for StdoutPrintHandler {
+    fn println(&self, text: &str) -> starlark::Result<()> {
+        println!("{text}");
+        Ok(())
+    }
+}
+
+pub(crate) static STDOUT_PRINT_HANDLER: StdoutPrintHandler = StdoutPrintHandler;
+
 pub struct AppletRunOptions<'a> {
     pub width: u32,
     pub height: u32,
     pub is_2x: bool,
     pub base_dir: Option<&'a Path>,
     pub secret_decryption_key: Option<&'a SecretDecryptionKey>,
+    /// When true, starlark `print()` output is discarded. When false it goes
+    /// to stdout. Default false matches pixlet's `--silent` opt-in model.
+    pub silent: bool,
+    /// Optional BCP47 locale tag. Stored but currently only validated; not
+    /// yet threaded into locale-aware modules. Parity placeholder for pixlet's
+    /// `--locale` flag.
+    pub locale: Option<String>,
 }
 
 impl<'a> AppletRunOptions<'a> {
@@ -50,6 +68,8 @@ impl<'a> AppletRunOptions<'a> {
             is_2x: false,
             base_dir: None,
             secret_decryption_key: None,
+            silent: false,
+            locale: None,
         }
     }
 }
@@ -97,6 +117,8 @@ impl Applet {
                 is_2x,
                 base_dir,
                 secret_decryption_key: None,
+                silent: false,
+                locale: None,
             },
         )
     }
@@ -130,7 +152,11 @@ impl Applet {
 
         let mut eval = Evaluator::new(&module);
         eval.set_loader(&loader);
-        eval.set_print_handler(&SILENT_PRINT_HANDLER);
+        if options.silent {
+            eval.set_print_handler(&SILENT_PRINT_HANDLER);
+        } else {
+            eval.set_print_handler(&STDOUT_PRINT_HANDLER);
+        }
         eval.eval_module(ast, &self.globals)
             .map_err(|e| anyhow!("{e}"))?;
 
@@ -1798,6 +1824,8 @@ def main(config):
                     is_2x: false,
                     base_dir: None,
                     secret_decryption_key: Some(&decryption_key),
+                    silent: true,
+                    locale: None,
                 },
             )
             .unwrap();

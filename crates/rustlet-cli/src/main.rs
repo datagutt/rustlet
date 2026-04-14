@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::{Command, ExitCode};
 
@@ -14,7 +13,10 @@ mod config;
 mod util;
 
 use commands::config_cmd::ConfigAction;
-use util::{collect_star_files, load_applet};
+use util::{
+    collect_star_files, default_output_path, explicit_output, load_applet, parse_config_args,
+    run_with_timeout, validate_locale,
+};
 
 #[derive(Parser)]
 #[command(name = "rustlet", about = "build apps for pixel-based displays")]
@@ -70,40 +72,77 @@ enum Commands {
         recursive: bool,
     },
 
-    /// Render a .star file to an image
+    /// Render a .star file or app directory to an image.
+    ///
+    /// Accepts positional `KEY=VALUE` overrides after the path, plus an
+    /// optional `--config/-c` JSON file. CLI overrides win on collision. If
+    /// the first positional looks like `key=value` and does not exist on
+    /// disk, the path defaults to `.`.
     Render {
-        /// Path to the .star file or app directory
-        file: PathBuf,
+        /// Path to the .star file or app directory, plus optional
+        /// `KEY=VALUE` config overrides.
+        #[arg(value_name = "PATH | KEY=VALUE")]
+        args: Vec<String>,
 
-        /// Output file path (default: stdout)
+        /// JSON config file. CLI `KEY=VALUE` overlays win on collision.
+        #[arg(short = 'c', long)]
+        config: Option<PathBuf>,
+
+        /// Output file path. Use `-` for stdout. When omitted, writes
+        /// `<stem>.<format>` (plus an `@2x` suffix when --2x is active).
         #[arg(short, long)]
         output: Option<PathBuf>,
 
         /// Display width in pixels
-        #[arg(long, default_value_t = 64)]
+        #[arg(short = 'w', long, default_value_t = 64)]
         width: u32,
 
         /// Display height in pixels
-        #[arg(long, default_value_t = 32)]
+        #[arg(short = 't', long, default_value_t = 32)]
         height: u32,
 
         /// Output format (auto-detected from extension if not specified)
         #[arg(long, value_enum)]
         format: Option<Format>,
 
-        /// Color filter to apply before encoding
-        #[arg(long, value_enum, default_value_t = Filter::None)]
-        filter: Filter,
+        /// Color filter to apply before encoding. `--filter` is a
+        /// backwards-compatible alias.
+        #[arg(long, alias = "filter", value_enum, default_value_t = Filter::None)]
+        color_filter: Filter,
 
         /// Integer magnification factor
-        #[arg(long, default_value_t = 1)]
+        #[arg(short = 'm', long, default_value_t = 1)]
         magnify: u32,
 
         /// Double the canvas size (128x64) and use terminus-16 default font.
         /// Auto-enabled when the manifest declares `supports2x: true` and the
         /// applet is loaded from a directory.
-        #[arg(long = "2x")]
+        #[arg(short = '2', long = "2x")]
         double: bool,
+
+        /// Silence starlark `print()` output.
+        #[arg(long)]
+        silent: bool,
+
+        /// Maximum animation length. Frames past this point are dropped.
+        #[arg(short = 'd', long, default_value = "15s")]
+        max_duration: humantime::Duration,
+
+        /// Wall-clock timeout for the whole render. Errors out if the
+        /// applet takes longer.
+        #[arg(long, default_value = "30s")]
+        timeout: humantime::Duration,
+
+        /// WebP lossless preset level (0=fastest, 9=smallest). Only applied
+        /// when output format is WebP.
+        #[arg(short = 'z', long, value_parser = clap::value_parser!(u8).range(0..=9))]
+        webp_level: Option<u8>,
+
+        /// BCP47 locale tag (e.g. en-US). Parity placeholder for pixlet's
+        /// `--locale`; currently validated but not yet wired into
+        /// locale-aware starlark modules.
+        #[arg(long)]
+        locale: Option<String>,
 
         /// Directory containing Twemoji SVG files (named by codepoint, e.g. 1f600.svg)
         #[arg(long)]
@@ -393,49 +432,48 @@ fn run() -> Result<ExitCode> {
             });
         }
         Commands::Render {
-            file,
+            args,
+            config: config_file,
             output,
             width,
             height,
             format,
-            filter,
-            magnify,
+            color_filter,
+            mut magnify,
             double,
+            silent,
+            max_duration,
+            timeout,
+            webp_level,
+            locale,
             twemoji_dir,
         } => {
             if let Some(ref dir) = twemoji_dir {
                 rustlet_render::Emoji::set_twemoji_dir(&dir.to_string_lossy());
             }
 
-            let loaded = load_applet(&file)?;
-            // `--2x` on the CLI takes precedence; otherwise auto-enable when the
-            // manifest opts in with `supports2x: true`, matching pixlet.
-            let is_2x =
-                double || loaded.manifest.as_ref().map(|m| m.supports2x).unwrap_or(false);
-            let (width, height) = if is_2x { (128, 64) } else { (width, height) };
+            let inputs = parse_config_args(&args, config_file.as_deref())?;
+            let file = inputs.path.unwrap_or_else(|| PathBuf::from("."));
+            let config = inputs.config;
 
-            let applet = Applet::new();
-            let config = HashMap::new();
-            let roots = applet.run_with_options(
-                &loaded.id,
-                &loaded.source,
-                &config,
-                width,
-                height,
-                is_2x,
-                loaded.base_dir.as_deref(),
-            )?;
-
-            if roots.is_empty() {
-                bail!("main() returned no roots");
+            if let Some(ref tag) = locale {
+                validate_locale(tag)?;
             }
 
-            let root = roots.into_iter().next().unwrap();
-            let mut frames = root.paint_frames(width, height);
-            let delay_ms = root.delay as u16;
+            let loaded = load_applet(&file)?;
 
-            rustlet_encode::apply_filter(&mut frames, filter);
-            let frames = rustlet_encode::magnify(&frames, magnify);
+            // `--2x` on the CLI takes precedence; otherwise auto-enable when the
+            // manifest opts in with `supports2x: true`, matching pixlet. If the
+            // user requested 2x but the manifest doesn't support it, silently
+            // double the magnify instead — mirrors `loader.go:388-391`.
+            let manifest_supports_2x =
+                loaded.manifest.as_ref().map(|m| m.supports2x).unwrap_or(false);
+            let mut is_2x = double || manifest_supports_2x;
+            if double && !manifest_supports_2x {
+                is_2x = false;
+                magnify = magnify.saturating_mul(2).max(1);
+            }
+            let (render_width, render_height) = if is_2x { (128, 64) } else { (width, height) };
 
             let out_format = match format {
                 Some(Format::Gif) => OutputFormat::Gif,
@@ -445,14 +483,70 @@ fn run() -> Result<ExitCode> {
                     .and_then(|p| p.extension())
                     .and_then(|e| e.to_str())
                 {
-                    Some("webp") => OutputFormat::WebP,
-                    _ => OutputFormat::Gif,
+                    Some("gif") => OutputFormat::Gif,
+                    _ => OutputFormat::WebP,
                 },
             };
 
-            let data = rustlet_encode::encode(&frames, delay_ms, out_format)?;
+            if let Some(level) = webp_level {
+                if matches!(out_format, OutputFormat::WebP) {
+                    rustlet_encode::set_webp_level(level);
+                }
+            }
 
-            match output {
+            // Move everything into the timeout worker; the starlark Evaluator is
+            // not Send but the closure owns all the inputs so it compiles.
+            let runtime_locale = locale.clone();
+            let id = loaded.id.clone();
+            let source = loaded.source.clone();
+            let base_dir = loaded.base_dir.clone();
+            let config_for_run = config.clone();
+            let roots = run_with_timeout(timeout.into(), move || {
+                let applet = Applet::new();
+                let opts = rustlet_runtime::AppletRunOptions {
+                    width: render_width,
+                    height: render_height,
+                    is_2x,
+                    base_dir: base_dir.as_deref(),
+                    secret_decryption_key: None,
+                    silent,
+                    locale: runtime_locale,
+                };
+                applet.run_with_runtime_options(&id, &source, &config_for_run, opts)
+            })?;
+
+            if roots.is_empty() {
+                bail!("main() returned no roots");
+            }
+
+            let root = roots.into_iter().next().unwrap();
+            let mut frames = root.paint_frames(render_width, render_height);
+            let delay_ms = root.delay as u16;
+
+            rustlet_encode::apply_filter(&mut frames, color_filter);
+            let frames = rustlet_encode::magnify(&frames, magnify);
+
+            let data = rustlet_encode::encode_with_max_duration(
+                &frames,
+                delay_ms,
+                out_format,
+                Some(max_duration.into()),
+            )?;
+
+            let resolved_output: Option<PathBuf> = match output.as_ref() {
+                Some(p) if p.as_os_str() == "-" => None,
+                Some(p) => Some(p.clone()),
+                None => {
+                    let ext = match out_format {
+                        OutputFormat::Gif => "gif",
+                        OutputFormat::WebP => "webp",
+                    };
+                    Some(default_output_path(&file, ext, is_2x))
+                }
+            };
+            let _ = explicit_output(output.as_deref());
+
+            match resolved_output {
                 Some(path) => std::fs::write(&path, &data)?,
                 None => {
                     use std::io::Write;

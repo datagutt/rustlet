@@ -1,5 +1,7 @@
 pub mod filter;
 
+use std::sync::atomic::{AtomicU8, Ordering};
+
 use anyhow::{bail, Result};
 
 pub use filter::{apply_filter, magnify, Filter};
@@ -10,16 +12,69 @@ pub enum OutputFormat {
     WebP,
 }
 
+/// Sentinel meaning "no level override; use the default encoder preset".
+const WEBP_LEVEL_UNSET: u8 = u8::MAX;
+
+static WEBP_LEVEL: AtomicU8 = AtomicU8::new(WEBP_LEVEL_UNSET);
+
+/// Override the WebP lossless preset level (0..=9). A value of 0 is fastest /
+/// largest, 9 is slowest / smallest. Mirrors pixlet's `--webp-level/-z` flag.
+/// Panics if `level > 9`.
+pub fn set_webp_level(level: u8) {
+    assert!(level <= 9, "webp level must be 0..=9, got {level}");
+    WEBP_LEVEL.store(level, Ordering::Relaxed);
+}
+
+/// Clear any previously-set WebP level override.
+pub fn clear_webp_level() {
+    WEBP_LEVEL.store(WEBP_LEVEL_UNSET, Ordering::Relaxed);
+}
+
+fn current_webp_level() -> Option<u8> {
+    let v = WEBP_LEVEL.load(Ordering::Relaxed);
+    (v != WEBP_LEVEL_UNSET).then_some(v)
+}
+
 /// Encode frames in the requested format.
 pub fn encode(
     frames: &[tiny_skia::Pixmap],
     delay_ms: u16,
     format: OutputFormat,
 ) -> Result<Vec<u8>> {
+    encode_with_max_duration(frames, delay_ms, format, None)
+}
+
+/// Encode frames with an optional animation-length cap. Frames past
+/// `max_duration` are dropped. Mirrors pixlet's `--max-duration/-d` behavior.
+pub fn encode_with_max_duration(
+    frames: &[tiny_skia::Pixmap],
+    delay_ms: u16,
+    format: OutputFormat,
+    max_duration: Option<std::time::Duration>,
+) -> Result<Vec<u8>> {
+    let frames = truncate_frames(frames, delay_ms, max_duration);
     match format {
-        OutputFormat::Gif => encode_gif(frames, delay_ms),
-        OutputFormat::WebP => encode_webp(frames, delay_ms),
+        OutputFormat::Gif => encode_gif(&frames, delay_ms),
+        OutputFormat::WebP => encode_webp(&frames, delay_ms),
     }
+}
+
+fn truncate_frames<'a>(
+    frames: &'a [tiny_skia::Pixmap],
+    delay_ms: u16,
+    max_duration: Option<std::time::Duration>,
+) -> std::borrow::Cow<'a, [tiny_skia::Pixmap]> {
+    let Some(max) = max_duration else {
+        return std::borrow::Cow::Borrowed(frames);
+    };
+    if delay_ms == 0 {
+        return std::borrow::Cow::Borrowed(frames);
+    }
+    let max_frames = (max.as_millis() as u64 / delay_ms as u64).max(1) as usize;
+    if frames.len() <= max_frames {
+        return std::borrow::Cow::Borrowed(frames);
+    }
+    std::borrow::Cow::Owned(frames[..max_frames].to_vec())
 }
 
 /// Encode frames as an animated GIF.
@@ -73,12 +128,19 @@ pub fn encode_webp(frames: &[tiny_skia::Pixmap], delay_ms: u16) -> Result<Vec<u8
     let width = frames[0].width();
     let height = frames[0].height();
 
+    // quality 0..100 maps to libwebp's lossless preset slider; pixlet passes
+    // an int 0..=9 via the -z flag which we spread across 0..=100 by *11.
+    // Clamped at 99 to stay inside the (exclusive) upper bound most backends
+    // accept without error.
+    let (quality, method) = match current_webp_level() {
+        Some(level) => (((level as f32) * 11.0).min(99.0), 4),
+        None => (75.0, 4),
+    };
     let options = webp_animation::EncoderOptions {
         encoding_config: Some(webp_animation::EncodingConfig {
             encoding_type: webp_animation::EncodingType::Lossless,
-            // Match Pixlet's default WebP lossless preset level (6) closely.
-            quality: 75.0,
-            method: 4,
+            quality,
+            method,
         }),
         ..Default::default()
     };
@@ -234,6 +296,36 @@ mod tests {
         let frame = solid_frame(64, 32, 0, 0, 255);
         let webp = encode(&[frame], 50, OutputFormat::WebP).unwrap();
         assert_eq!(&webp[..4], b"RIFF");
+    }
+
+    #[test]
+    fn truncate_frames_respects_max_duration() {
+        let frame = solid_frame(2, 2, 0, 0, 0);
+        let frames: Vec<_> = (0..10).map(|_| frame.clone()).collect();
+        let got = truncate_frames(&frames, 100, Some(std::time::Duration::from_millis(350)));
+        assert_eq!(got.len(), 3);
+
+        let got = truncate_frames(&frames, 100, None);
+        assert_eq!(got.len(), 10);
+
+        let got = truncate_frames(&frames, 100, Some(std::time::Duration::from_millis(0)));
+        assert_eq!(got.len(), 1, "zero duration produces one frame minimum");
+    }
+
+    #[test]
+    fn webp_level_setter_clamps_to_9() {
+        set_webp_level(9);
+        assert_eq!(current_webp_level(), Some(9));
+        set_webp_level(0);
+        assert_eq!(current_webp_level(), Some(0));
+        clear_webp_level();
+        assert_eq!(current_webp_level(), None);
+    }
+
+    #[test]
+    #[should_panic(expected = "webp level must be")]
+    fn webp_level_panics_above_9() {
+        set_webp_level(10);
     }
 
     #[test]
