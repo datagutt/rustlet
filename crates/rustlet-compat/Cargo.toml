@@ -1,15 +1,15 @@
 [package]
 name = "rustlet-compat"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
-anyhow = "1"
-image = { version = "0.25", default-features = false, features = ["png", "gif", "webp"] }
-rustlet-encode = { path = "../rustlet-encode" }
-rustlet-runtime = { path = "../rustlet-runtime" }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-sha2 = "0.10"
-tempfile = "3"
-tiny-skia = "0.11"
+anyhow.workspace = true
+image = { workspace = true, features = ["png", "gif", "webp"] }
+rustlet-encode.workspace = true
+rustlet-runtime.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tempfile.workspace = true
+tiny-skia.workspace = true

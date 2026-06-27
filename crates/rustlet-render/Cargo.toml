@@ -1,15 +1,15 @@
 [package]
 name = "rustlet-render"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
-tiny-skia = "0.11"
+tiny-skia.workspace = true
 resvg = "0.45"
-image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif"] }
+image = { workspace = true, features = ["png", "jpeg", "gif"] }
 imageproc = { version = "0.25", default-features = false }
 color-name = "1"
-anyhow = "1"
+anyhow.workspace = true
 unicode-bidi = "0.3"
 unicode-segmentation = "1"
 

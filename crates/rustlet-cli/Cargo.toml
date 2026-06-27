@@ -1,19 +1,19 @@
 [package]
 name = "rustlet-cli"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
-rustlet-render = { path = "../rustlet-render" }
-rustlet-runtime = { path = "../rustlet-runtime" }
-rustlet-encode = { path = "../rustlet-encode", features = ["clap"] }
-clap = { version = "4", features = ["derive", "env"] }
-anyhow = "1"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-serde_yaml = "0.9.34"
+rustlet-render.workspace = true
+rustlet-runtime.workspace = true
+rustlet-encode = { workspace = true, features = ["clap"] }
+clap = { workspace = true, features = ["derive", "env"] }
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
 ureq = { version = "3.3.0", features = ["json"] }
-base64 = "0.22"
+base64.workspace = true
 dirs = "5"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "signal"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
@@ -27,4 +27,4 @@ clap_complete = "4"
 humantime = "2"
 
 [dev-dependencies]
-tempfile = "3"
+tempfile.workspace = true

@@ -1,19 +1,19 @@
 [package]
 name = "rustlet-runtime"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
-rustlet-render = { path = "../rustlet-render" }
+rustlet-render.workspace = true
 starlark = "0.13"
 starlark_derive = "0.13"
 allocative = "0.3"
 derive_more = "1"
-anyhow = "1"
-base64 = "0.22"
+anyhow.workspace = true
+base64.workspace = true
 getrandom = "0.3"
-serde_json = "1"
-tiny-skia = "0.11"
+serde_json.workspace = true
+tiny-skia.workspace = true
 ureq = "3.3.0"
 dupe = "0.9.1"
 iana-time-zone = "0.1.65"
@@ -26,14 +26,14 @@ hmac = "0.12.1"
 md-5 = "0.10.6"
 qrcode = "0.14.1"
 sha1 = "0.10.6"
-sha2 = "0.10.9"
+sha2.workspace = true
 sunrise = "3.0.0"
 tink-core = { version = "0.3.0", features = ["json"] }
 tink-hybrid = "0.3.0"
 csv = "1.4.0"
-serde = { version = "1", features = ["derive"] }
-serde_yaml = "0.9.34"
+serde.workspace = true
+serde_yaml.workspace = true
 scraper = { version = "0.24", default-features = false }
 
 [dev-dependencies]
-tempfile = "3"
+tempfile.workspace = true
