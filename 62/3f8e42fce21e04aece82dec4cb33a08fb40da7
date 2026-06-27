@@ -1,0 +1,28 @@
+crates/rustlet-compat/compat_cases/fixtures/text_offset.star
+  s_e25ef1f8a3595a::t_1d6447c81d500c 1-16
+crates/rustlet-compat/compat_cases/fixtures/text_tomthumb_wrap.star
+  s_e25ef1f8a3595a::t_045b8b512efa3e 1-17
+crates/rustlet-compat/compat_cases/fixtures/text_missing_glyph.star
+  s_e25ef1f8a3595a::t_83121e56a327bd 1-9,11-15
+  s_e25ef1f8a3595a::t_059146bbc1e1b6 10
+crates/rustlet-compat/compat_cases/cases.json
+  s_e25ef1f8a3595a::t_ff97da0200def1 47-70
+.github/workflows/ci.yml
+  s_e25ef1f8a3595a::t_3ece24ae3c153d 26-41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "623f8e42fce21e04aece82dec4cb33a08fb40da7",
+  "prompts": {},
+  "sessions": {
+    "s_e25ef1f8a3595a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f08fddf2-6d0a-40df-8f27-9f2d069f4a52",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "datagutt <datagutt@lekanger.no>"
+    }
+  }
+}
