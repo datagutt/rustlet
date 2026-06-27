@@ -23,3 +23,19 @@ jobs:
         run: cargo clippy --workspace --all-targets
       - name: Test
         run: cargo test --workspace
+
+  compat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+      - uses: Swatinem/rust-cache@v2
+      - name: Fetch pixlet oracle (tronbyt v0.53.1)
+        run: |
+          git clone --depth 1 --branch v0.53.1 \
+            https://github.com/tronbyt/pixlet .reference/pixlet
+      - name: Compat parity tests
+        run: cargo test -p rustlet-compat

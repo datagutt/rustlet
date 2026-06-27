@@ -45,6 +45,30 @@
       "policy": "exact"
     },
     {
+      "id": "text_offset_fixture",
+      "kind": "fixture",
+      "path": "fixtures/text_offset.star",
+      "output_format": "webp",
+      "policy": "known_diff",
+      "reason": "text offset direction/baseline bug — flip to exact when plan 012 lands"
+    },
+    {
+      "id": "text_tomthumb_wrap_fixture",
+      "kind": "fixture",
+      "path": "fixtures/text_tomthumb_wrap.star",
+      "output_format": "webp",
+      "policy": "known_diff",
+      "reason": "WrappedText glyph baseline + reported height bug — flip to exact when plan 013 lands"
+    },
+    {
+      "id": "text_missing_glyph_fixture",
+      "kind": "fixture",
+      "path": "fixtures/text_missing_glyph.star",
+      "output_format": "webp",
+      "policy": "known_diff",
+      "reason": "unknown-glyph advance bug — flip to exact when plan 014 lands"
+    },
+    {
       "id": "canvas_fake_events_app",
       "kind": "reference_app",
       "path": ".reference/apps/apps/canvas",
