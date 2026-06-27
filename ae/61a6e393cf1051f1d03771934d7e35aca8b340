@@ -1,0 +1,29 @@
+crates/rustlet-cli/Cargo.toml
+  s_e25ef1f8a3595a::t_4806e7c1f5ee21 3-4,7-14,16,30
+crates/rustlet-compat/Cargo.toml
+  s_e25ef1f8a3595a::t_6731e4612f4cd8 3-4,7-15
+crates/rustlet-runtime/Cargo.toml
+  s_e25ef1f8a3595a::t_737932a6301462 3-4,7,12-13,15-16,29,34-35,39
+crates/rustlet-render/Cargo.toml
+  s_e25ef1f8a3595a::t_e5c655321e0998 3-4,7,9,12
+Cargo.toml
+  s_e25ef1f8a3595a::t_f5d0a709f17f12 4-22
+crates/rustlet-encode/Cargo.toml
+  s_e25ef1f8a3595a::t_ce76687be7d205 3-4,12-15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "ae61a6e393cf1051f1d03771934d7e35aca8b340",
+  "prompts": {},
+  "sessions": {
+    "s_e25ef1f8a3595a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f08fddf2-6d0a-40df-8f27-9f2d069f4a52",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "datagutt <datagutt@lekanger.no>"
+    }
+  }
+}
