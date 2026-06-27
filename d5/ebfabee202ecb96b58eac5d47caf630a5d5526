@@ -1,0 +1,19 @@
+Cargo.toml
+  s_e25ef1f8a3595a::t_f3e0a00549f7ae 18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "d5ebfabee202ecb96b58eac5d47caf630a5d5526",
+  "prompts": {},
+  "sessions": {
+    "s_e25ef1f8a3595a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f08fddf2-6d0a-40df-8f27-9f2d069f4a52",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "datagutt <datagutt@lekanger.no>"
+    }
+  }
+}
