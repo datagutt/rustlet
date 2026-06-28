@@ -1,0 +1,27 @@
+crates/rustlet-render/src/render/text.rs
+  s_e25ef1f8a3595a::t_7893eaeef39634 184
+crates/rustlet-render/src/fonts/mod.rs
+  s_e25ef1f8a3595a::t_e2a251196e9910 334-342
+  s_e25ef1f8a3595a::t_c9c96169f74950 54-56
+  s_e25ef1f8a3595a::t_22b27ce4377f55 333
+crates/rustlet-render/src/render/wrapped_text.rs
+  s_e25ef1f8a3595a::t_42d148310d628b 305
+crates/rustlet-compat/compat_cases/cases.json
+  s_e25ef1f8a3595a::t_0e4ae33d97bf56 66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "845937fd9f5d0f66af827c755d44e3c821ddff7e",
+  "prompts": {},
+  "sessions": {
+    "s_e25ef1f8a3595a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f08fddf2-6d0a-40df-8f27-9f2d069f4a52",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "datagutt <datagutt@lekanger.no>"
+    }
+  }
+}
