@@ -1,0 +1,24 @@
+crates/rustlet-cli/src/commands/serve/handlers.rs
+  s_d3b38f22d24122::t_c335410af4455b 399-402,413
+  s_d3b38f22d24122::t_364a1810d10b82 568-619
+  s_d3b38f22d24122::t_d4f1e2ec11e5c8 474-502
+  s_d3b38f22d24122::t_7991dc7e751506 119-122,133
+  s_d3b38f22d24122::t_28dfd05b3cfbbf 545,554,563
+  s_d3b38f22d24122::t_5eaa4704f81e01 277-280,292
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "9df1596ab1b34170384bab69d5dc11137cd9b871",
+  "prompts": {},
+  "sessions": {
+    "s_d3b38f22d24122": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "174fbf78-009c-41cc-9fc0-444064afe6fb",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "datagutt <datagutt@lekanger.no>"
+    }
+  }
+}
