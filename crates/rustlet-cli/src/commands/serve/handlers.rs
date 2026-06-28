@@ -116,6 +116,10 @@ pub async fn api_preview(
     maybe_save_config(&state, &config);
 
     let (scale_is_2x, _) = meta_scale(&config);
+    let locale = match meta_locale(&config) {
+        Ok(l) => l,
+        Err(e) => return bad_request(&e),
+    };
     let stripped = strip_meta_keys(&config);
     let is_2x = state.is_2x || scale_is_2x;
 
@@ -126,7 +130,7 @@ pub async fn api_preview(
     let timeout = state.timeout;
 
     let join = tokio::task::spawn_blocking(move || {
-        render_config(&path, &stripped, width, height, is_2x, OutputFormat::WebP, max_duration)
+        render_config(&path, &stripped, width, height, is_2x, OutputFormat::WebP, max_duration, locale)
     });
     let bytes = match tokio::time::timeout(timeout, join).await {
         Ok(Ok(Ok(b))) => b,
@@ -270,6 +274,10 @@ pub async fn api_push(
             config.insert(k, v.to_string());
         }
     }
+    let locale = match meta_locale(&config) {
+        Ok(l) => l,
+        Err(e) => return bad_request(&e),
+    };
     let stripped = strip_meta_keys(&config);
 
     // Render the current frame with the supplied config.
@@ -281,7 +289,7 @@ pub async fn api_push(
     let timeout = state.timeout;
 
     let render_join = tokio::task::spawn_blocking(move || {
-        render_config(&path, &stripped, width, height, is_2x, OutputFormat::WebP, max_duration)
+        render_config(&path, &stripped, width, height, is_2x, OutputFormat::WebP, max_duration, locale)
     });
     let bytes = match tokio::time::timeout(timeout, render_join).await {
         Ok(Ok(Ok(b))) => b,
@@ -388,6 +396,10 @@ async fn preview_image_response(
     maybe_save_config(&state, &config);
 
     let (scale_is_2x, _) = meta_scale(&config);
+    let locale = match meta_locale(&config) {
+        Ok(l) => l,
+        Err(e) => return bad_request(&e),
+    };
     let stripped = strip_meta_keys(&config);
     let is_2x = state.is_2x || scale_is_2x;
 
@@ -398,7 +410,7 @@ async fn preview_image_response(
     let timeout = state.timeout;
 
     let join = tokio::task::spawn_blocking(move || {
-        render_config(&path, &stripped, width, height, is_2x, format, max_duration)
+        render_config(&path, &stripped, width, height, is_2x, format, max_duration, locale)
     });
 
     let result: std::result::Result<Vec<u8>, (StatusCode, anyhow::Error)> =
@@ -459,6 +471,35 @@ fn strip_meta_keys(config: &HashMap<String, String>) -> HashMap<String, String> 
         .collect()
 }
 
+/// Pull the preview locale/timezone out of the raw config (the meta keys the UI
+/// carries through the form) before `strip_meta_keys` removes them. The locale
+/// is validated with the same `validate_locale` the `render` command uses and
+/// returned so it can reach `RenderBytesOptions.locale` (parity with
+/// `render --locale`: both carry it; full locale-aware formatting is a separate
+/// effort). A `_metaTimezone` override is surfaced on stderr rather than
+/// silently dropped: rustlet's `time.now()` has no per-run timezone hook yet, so
+/// applying it needs a runtime feature (a follow-up; see plans/016).
+fn meta_locale(config: &HashMap<String, String>) -> Result<Option<String>> {
+    if let Some(tz) = config
+        .get(META_TIMEZONE)
+        .map(String::as_str)
+        .filter(|s| !s.is_empty())
+    {
+        eprintln!(
+            "preview timezone override `{tz}` is not yet applied: rustlet's time.now() \
+             uses the system zone (runtime timezone support is a follow-up)"
+        );
+    }
+    match config
+        .get(META_LOCALE)
+        .map(String::as_str)
+        .filter(|s| !s.is_empty())
+    {
+        Some(tag) => Ok(Some(crate::util::validate_locale(tag)?)),
+        None => Ok(None),
+    }
+}
+
 /// Extract `_renderScale` and return `(is_2x, raw_value)`. Invalid values
 /// default to false.
 fn meta_scale(config: &HashMap<String, String>) -> (bool, Option<&str>) {
@@ -501,6 +542,7 @@ fn bad_request(err: &anyhow::Error) -> Response {
     render_error(StatusCode::BAD_REQUEST, err)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render_config(
     path: &Path,
     config: &HashMap<String, String>,
@@ -509,6 +551,7 @@ fn render_config(
     is_2x: bool,
     format: OutputFormat,
     max_duration: Option<std::time::Duration>,
+    locale: Option<String>,
 ) -> Result<Vec<u8>> {
     let opts = RenderBytesOptions {
         width,
@@ -517,7 +560,60 @@ fn render_config(
         format,
         silent: false,
         max_duration,
+        locale,
         ..Default::default()
     };
     render_bytes(path, config, &opts)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn preview_config() -> HashMap<String, String> {
+        let mut c = HashMap::new();
+        c.insert("city".to_string(), "Oslo".to_string());
+        c.insert(META_RENDER_SCALE.to_string(), "2".to_string());
+        c.insert(META_LOCALE.to_string(), "en-US".to_string());
+        c.insert(META_TIMEZONE.to_string(), "America/New_York".to_string());
+        c
+    }
+
+    #[test]
+    fn strip_meta_keys_removes_reserved_keys() {
+        // The three UI-only keys (scale, locale, timezone) must never reach the
+        // applet's config map; everything else passes through unchanged.
+        let stripped = strip_meta_keys(&preview_config());
+        assert_eq!(stripped.get("city").map(String::as_str), Some("Oslo"));
+        assert!(!stripped.contains_key(META_RENDER_SCALE));
+        assert!(!stripped.contains_key(META_LOCALE));
+        assert!(!stripped.contains_key(META_TIMEZONE));
+    }
+
+    #[test]
+    fn meta_locale_extracts_and_validates() {
+        // Present + valid -> Some(tag). (The timezone is surfaced on stderr, not
+        // returned; it is intentionally not applied yet.)
+        assert_eq!(
+            meta_locale(&preview_config()).unwrap(),
+            Some("en-US".to_string())
+        );
+
+        // Absent -> None.
+        let mut bare = HashMap::new();
+        bare.insert("city".to_string(), "Oslo".to_string());
+        assert_eq!(meta_locale(&bare).unwrap(), None);
+
+        // Empty value is treated as absent.
+        let mut empty = HashMap::new();
+        empty.insert(META_LOCALE.to_string(), String::new());
+        assert_eq!(meta_locale(&empty).unwrap(), None);
+    }
+
+    #[test]
+    fn meta_locale_rejects_invalid_tag() {
+        let mut cfg = HashMap::new();
+        cfg.insert(META_LOCALE.to_string(), "en US".to_string());
+        assert!(meta_locale(&cfg).is_err());
+    }
 }
