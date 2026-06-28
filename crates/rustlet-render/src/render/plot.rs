@@ -348,6 +348,8 @@ mod tests {
         }
     }
 
+    // test data values that happen to fall near PI; not an approximation of the constant
+    #[allow(clippy::approx_constant)]
     #[test]
     fn compute_limits_from_data() {
         let p = Plot {
@@ -361,6 +363,8 @@ mod tests {
         assert_eq!(ymax, 2.9);
     }
 
+    // test data values that happen to fall near PI; not an approximation of the constant
+    #[allow(clippy::approx_constant)]
     #[test]
     fn compute_limits_explicit() {
         let p = Plot {
@@ -383,6 +387,8 @@ mod tests {
         assert_eq!((xmin, xmax, ymin, ymax), (0.0, 1.0, 0.0, 1.0));
     }
 
+    // test data values that happen to fall near PI; not an approximation of the constant
+    #[allow(clippy::approx_constant)]
     #[test]
     fn compute_limits_equal_y() {
         let p = Plot {
@@ -394,6 +400,8 @@ mod tests {
         assert_eq!(ymax, 3.14 + 0.5);
     }
 
+    // test data values that happen to fall near PI; not an approximation of the constant
+    #[allow(clippy::approx_constant)]
     #[test]
     fn compute_limits_equal_x() {
         let p = Plot {

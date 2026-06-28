@@ -194,7 +194,7 @@ mod tests {
         let mut pixmap = Pixmap::new(4, 4).unwrap();
         // At end of animation, child should be at x=2
         t.paint(&mut pixmap, Rect::new(0, 0, 4, 4), 10);
-        let px = pixmap.pixels()[(0 * 4 + 2) as usize];
+        let px = pixmap.pixels()[2];
         assert_eq!(px.green(), 255, "expected green pixel at (2,0)");
     }
 }

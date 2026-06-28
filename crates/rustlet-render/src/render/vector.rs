@@ -327,8 +327,8 @@ mod tests {
         let mut pixmap = Pixmap::new(64, 32).unwrap();
         v.paint(&mut pixmap, Rect::new(0, 0, 64, 32), 0);
         // pixel at (60,0) should be red, pixel at (59,0) should not
-        let p60 = pixmap.pixels()[(0 * 64 + 60) as usize];
-        let p59 = pixmap.pixels()[(0 * 64 + 59) as usize];
+        let p60 = pixmap.pixels()[60];
+        let p59 = pixmap.pixels()[59];
         assert_eq!(p60.red(), 255);
         assert_eq!(p59.alpha(), 0);
     }
@@ -345,8 +345,8 @@ mod tests {
         let mut pixmap = Pixmap::new(64, 32).unwrap();
         v.paint(&mut pixmap, Rect::new(0, 0, 64, 32), 0);
         // child should be at x=30 (remaining=60, offset=30)
-        let p30 = pixmap.pixels()[(0 * 64 + 30) as usize];
-        let p29 = pixmap.pixels()[(0 * 64 + 29) as usize];
+        let p30 = pixmap.pixels()[30];
+        let p29 = pixmap.pixels()[29];
         assert_eq!(p30.red(), 255);
         assert_eq!(p29.alpha(), 0);
     }
@@ -368,7 +368,7 @@ mod tests {
         let p_inside = pixmap.pixels()[(2 * 64 + 0) as usize];
         assert_eq!(p_inside.red(), 255);
         // Row 0 should be empty (offset not reached yet)
-        let p_outside = pixmap.pixels()[(0 * 64 + 0) as usize];
+        let p_outside = pixmap.pixels()[0];
         assert_eq!(p_outside.alpha(), 0);
     }
 

@@ -834,6 +834,8 @@ mod tests {
         assert_eq!(time_format_impl("MM/dd/yyyy", ts), "01/01/2021");
     }
 
+    // test data values that happen to fall near PI; not an approximation of the constant
+    #[allow(clippy::approx_constant)]
     #[test]
     fn test_format_float_pattern() {
         assert_eq!(format_float_pattern("#,###.##", 1234.56), "1,234.56");
