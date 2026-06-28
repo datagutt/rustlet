@@ -1,0 +1,33 @@
+crates/rustlet-runtime/src/applet.rs
+  s_d3b38f22d24122::t_c9d39d8f6bc6a3 2357-2448
+crates/rustlet-runtime/src/schema_module.rs
+  s_d3b38f22d24122::t_4bc87272aa584e 118-120
+  s_d3b38f22d24122::t_e8e18a88a14d24 463-532
+  s_d3b38f22d24122::t_77c848f10ba0b5 555-564
+  s_d3b38f22d24122::t_c70f223ff54af8 540-541
+  s_d3b38f22d24122::t_35491f8ed9fb70 641-684
+  s_d3b38f22d24122::t_0902757e8805f1 710
+  s_d3b38f22d24122::t_376efbe1b2da29 1168-1169,1172-1175,1180-1181,1183
+  s_d3b38f22d24122::t_24202050434b43 755-756,761
+  s_d3b38f22d24122::t_9335eae0912408 1213-1214,1217-1237
+  s_d3b38f22d24122::t_73918c3a0fc074 191-219
+  s_d3b38f22d24122::t_51d49d777e2ce9 258-321
+  s_d3b38f22d24122::t_0320c8b38b20f1 14
+  s_d3b38f22d24122::t_1a24938bf36bf6 727-733
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "bc985b6eb50100102c2116b0f2c6466e2f16991d",
+  "prompts": {},
+  "sessions": {
+    "s_d3b38f22d24122": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "174fbf78-009c-41cc-9fc0-444064afe6fb",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "datagutt <datagutt@lekanger.no>"
+    }
+  }
+}
