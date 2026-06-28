@@ -11,6 +11,7 @@ use starlark::values::{Heap, NoSerialize, ProvidesStaticType, StarlarkValue, Val
 use starlark_derive::starlark_value;
 
 use crate::json_module::starlark_to_serde;
+use crate::starlark_file::StarlarkFile;
 
 // Handler return types, mirroring pixlet's `HandlerReturnType` iota
 // (.reference/pixlet/schema/schema.go:16-19). Exposed to Starlark as
@@ -114,8 +115,9 @@ fn normalize_hex_color(hex: &str) -> anyhow::Result<String> {
 
 /// Validate a schema against pixlet's struct-tag rules
 /// (.reference/pixlet/schema/schema.go:40-60). Catches malformed schemas locally
-/// instead of deferring to the backend. The notification `Sounds` rule is
-/// intentionally deferred to plan 011.
+/// instead of deferring to the backend. Notifications are validated too: pixlet
+/// tags `Sounds` as `required_for=notification` and each `SchemaSound` requires
+/// id/title/path (schema.go:48,73-77).
 pub fn validate_schema(schema: &StarlarkSchemaSchema) -> anyhow::Result<()> {
     for f in &schema.fields {
         let id = &f.id;
@@ -186,6 +188,35 @@ pub fn validate_schema(schema: &StarlarkSchemaSchema) -> anyhow::Result<()> {
             }
         }
     }
+    for n in &schema.notifications {
+        let id = &n.id;
+        if n.id.is_empty() {
+            return Err(anyhow::anyhow!("schema notification is missing a required id"));
+        }
+        if n.id.contains('$') {
+            return Err(anyhow::anyhow!("schema notification id {id:?} must not contain '$'"));
+        }
+        if n.sounds.is_empty() {
+            return Err(anyhow::anyhow!(
+                "schema notification {id:?} requires at least one sound"
+            ));
+        }
+        for (i, s) in n.sounds.iter().enumerate() {
+            if s.id.is_empty() {
+                return Err(anyhow::anyhow!("schema notification {id:?} sound {i} requires an id"));
+            }
+            if s.title.is_empty() {
+                return Err(anyhow::anyhow!(
+                    "schema notification {id:?} sound {i} requires a title"
+                ));
+            }
+            if s.path.is_empty() {
+                return Err(anyhow::anyhow!(
+                    "schema notification {id:?} sound {i} requires a path"
+                ));
+            }
+        }
+    }
     Ok(())
 }
 
@@ -222,6 +253,70 @@ pub struct SchemaField {
 pub struct SchemaOption {
     pub text: String,
     pub value: String,
+}
+
+/// A playable sound attached to a notification. Mirrors pixlet's `SchemaSound`
+/// (.reference/pixlet/schema/schema.go:73-77): all three fields are required and
+/// `path` is derived from a `file` object's `.Path`.
+#[derive(Debug, Clone, Allocative)]
+pub struct SchemaSound {
+    pub id: String,
+    pub title: String,
+    pub path: String,
+}
+
+/// A notification declaration. pixlet's `Notification` embeds a `SchemaField`
+/// (so it serializes like one: `type:"notification"` plus id/name/desc/icon and a
+/// `sounds` array) and carries a `Builder` callback that is not serialized
+/// (.reference/pixlet/schema/notification.go:11-15). We store the builder by its
+/// handler name (same convention as field handlers, plan 009).
+#[derive(Debug, Clone, Allocative)]
+pub struct Notification {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub icon: String,
+    pub sounds: Vec<SchemaSound>,
+    pub builder_handler: Option<String>,
+}
+
+impl Notification {
+    fn to_json(&self) -> JsonValue {
+        let mut map = Map::new();
+        // pixlet embeds SchemaField, so the entry carries the field shape.
+        map.insert(
+            "type".to_string(),
+            JsonValue::String("notification".to_string()),
+        );
+        map.insert("id".to_string(), JsonValue::String(self.id.clone()));
+        if !self.name.is_empty() {
+            map.insert("name".to_string(), JsonValue::String(self.name.clone()));
+        }
+        if !self.description.is_empty() {
+            map.insert(
+                "description".to_string(),
+                JsonValue::String(self.description.clone()),
+            );
+        }
+        if !self.icon.is_empty() {
+            map.insert("icon".to_string(), JsonValue::String(self.icon.clone()));
+        }
+        if !self.sounds.is_empty() {
+            let sounds: Vec<JsonValue> = self
+                .sounds
+                .iter()
+                .map(|s| {
+                    json!({
+                        "id": s.id,
+                        "title": s.title,
+                        "path": s.path,
+                    })
+                })
+                .collect();
+            map.insert("sounds".to_string(), JsonValue::Array(sounds));
+        }
+        JsonValue::Object(map)
+    }
 }
 
 impl SchemaField {
@@ -366,12 +461,84 @@ impl<'v> StarlarkValue<'v> for StarlarkSchemaField {
 }
 
 #[derive(Debug, ProvidesStaticType, NoSerialize, Allocative)]
+pub struct StarlarkSound {
+    pub inner: SchemaSound,
+}
+
+starlark_simple_value!(StarlarkSound);
+
+impl fmt::Display for StarlarkSound {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Sound({})", self.inner.id)
+    }
+}
+
+#[starlark_value(type = "Sound")]
+impl<'v> StarlarkValue<'v> for StarlarkSound {
+    fn has_attr(&self, attribute: &str, _heap: &'v Heap) -> bool {
+        matches!(attribute, "id" | "title" | "path")
+    }
+
+    fn dir_attr(&self) -> Vec<String> {
+        ["id", "title", "path"].iter().map(|s| s.to_string()).collect()
+    }
+
+    fn get_attr(&self, attribute: &str, heap: &'v Heap) -> Option<Value<'v>> {
+        match attribute {
+            "id" => Some(heap.alloc(self.inner.id.as_str())),
+            "title" => Some(heap.alloc(self.inner.title.as_str())),
+            "path" => Some(heap.alloc(self.inner.path.as_str())),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, ProvidesStaticType, NoSerialize, Allocative)]
+pub struct StarlarkNotification {
+    pub inner: Notification,
+}
+
+starlark_simple_value!(StarlarkNotification);
+
+impl fmt::Display for StarlarkNotification {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Notification({})", self.inner.id)
+    }
+}
+
+#[starlark_value(type = "Notification")]
+impl<'v> StarlarkValue<'v> for StarlarkNotification {
+    fn has_attr(&self, attribute: &str, _heap: &'v Heap) -> bool {
+        matches!(attribute, "id" | "name" | "desc" | "icon")
+    }
+
+    fn dir_attr(&self) -> Vec<String> {
+        ["id", "name", "desc", "icon"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
+    }
+
+    fn get_attr(&self, attribute: &str, heap: &'v Heap) -> Option<Value<'v>> {
+        match attribute {
+            "id" => Some(heap.alloc(self.inner.id.as_str())),
+            "name" => Some(heap.alloc(self.inner.name.as_str())),
+            "desc" => Some(heap.alloc(self.inner.description.as_str())),
+            "icon" => Some(heap.alloc(self.inner.icon.as_str())),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, ProvidesStaticType, NoSerialize, Allocative)]
 pub struct StarlarkSchemaSchema {
     pub version: String,
     #[allocative(skip)]
     pub fields: Vec<SchemaField>,
     #[allocative(skip)]
     pub handler_names: Vec<String>,
+    #[allocative(skip)]
+    pub notifications: Vec<Notification>,
 }
 
 starlark_simple_value!(StarlarkSchemaSchema);
@@ -385,11 +552,16 @@ impl fmt::Display for StarlarkSchemaSchema {
 impl StarlarkSchemaSchema {
     pub fn to_json(&self) -> JsonValue {
         let schema_arr: Vec<JsonValue> = self.fields.iter().map(|f| f.to_json()).collect();
-        json!({
-            "version": self.version,
-            "schema": schema_arr,
-            "notifications": Vec::<JsonValue>::new(),
-        })
+        let mut map = Map::new();
+        map.insert("version".to_string(), JsonValue::String(self.version.clone()));
+        map.insert("schema".to_string(), JsonValue::Array(schema_arr));
+        // pixlet tags Notifications `omitempty`, so omit the key entirely when
+        // there are none (schema.go:33) rather than emitting an empty array.
+        if !self.notifications.is_empty() {
+            let notifs: Vec<JsonValue> = self.notifications.iter().map(|n| n.to_json()).collect();
+            map.insert("notifications".to_string(), JsonValue::Array(notifs));
+        }
+        JsonValue::Object(map)
     }
 }
 
@@ -466,6 +638,50 @@ fn collect_string_list(value: Value<'_>) -> anyhow::Result<Option<Vec<String>>> 
     Ok(Some(out))
 }
 
+fn collect_sounds(value: Value<'_>) -> anyhow::Result<Vec<SchemaSound>> {
+    if value.is_none() {
+        return Ok(Vec::new());
+    }
+    let list = ListRef::from_value(value)
+        .ok_or_else(|| anyhow::anyhow!("sounds must be a list, got {}", value.get_type()))?;
+    let mut out = Vec::with_capacity(list.len());
+    for (i, item) in list.iter().enumerate() {
+        if item.is_none() {
+            continue;
+        }
+        let s = item.downcast_ref::<StarlarkSound>().ok_or_else(|| {
+            anyhow::anyhow!(
+                "expected sounds to be a list of Sound but found: {} (at index {i})",
+                item.get_type()
+            )
+        })?;
+        out.push(s.inner.clone());
+    }
+    Ok(out)
+}
+
+fn collect_notifications(value: Value<'_>) -> anyhow::Result<Vec<Notification>> {
+    if value.is_none() {
+        return Ok(Vec::new());
+    }
+    let list = ListRef::from_value(value)
+        .ok_or_else(|| anyhow::anyhow!("notifications must be a list, got {}", value.get_type()))?;
+    let mut out = Vec::with_capacity(list.len());
+    for (i, item) in list.iter().enumerate() {
+        if item.is_none() {
+            continue;
+        }
+        let n = item.downcast_ref::<StarlarkNotification>().ok_or_else(|| {
+            anyhow::anyhow!(
+                "expected notifications to be a list of Notification but found: {} (at index {i})",
+                item.get_type()
+            )
+        })?;
+        out.push(n.inner.clone());
+    }
+    Ok(out)
+}
+
 fn handler_function_name(value: Value<'_>) -> Option<String> {
     if value.is_none() {
         return None;
@@ -491,7 +707,7 @@ pub fn schema_module(builder: &mut GlobalsBuilder) {
         #[starlark(default = "1")] version: &str,
         #[starlark(default = NoneType)] fields: Value<'v>,
         #[starlark(default = NoneType)] handlers: Value<'v>,
-        #[starlark(default = NoneType)] _notifications: Value<'v>,
+        #[starlark(default = NoneType)] notifications: Value<'v>,
         eval: &mut Evaluator<'v, '_, '_>,
     ) -> anyhow::Result<Value<'v>> {
         if version != "1" {
@@ -507,6 +723,13 @@ pub fn schema_module(builder: &mut GlobalsBuilder) {
             for item in list.iter() {
                 if item.is_none() {
                     continue;
+                }
+                // pixlet rejects a Notification placed in `fields`; it must be
+                // passed via `notifications=` (.reference/pixlet/schema/module.go:123-128).
+                if item.downcast_ref::<StarlarkNotification>().is_some() {
+                    return Err(anyhow::anyhow!(
+                        "notifications must be passed to schema.Schema via notifications=, not in fields"
+                    ));
                 }
                 let f = item
                     .downcast_ref::<StarlarkSchemaField>()
@@ -529,10 +752,13 @@ pub fn schema_module(builder: &mut GlobalsBuilder) {
             }
         }
 
+        let notifications = collect_notifications(notifications)?;
+
         Ok(eval.heap().alloc(StarlarkSchemaSchema {
             version: version.to_string(),
             fields: schema_fields,
             handler_names,
+            notifications,
         }))
     }
 
@@ -939,29 +1165,22 @@ pub fn schema_module(builder: &mut GlobalsBuilder) {
         name: &str,
         desc: &str,
         icon: &str,
-        #[starlark(default = NoneType)] _sounds: Value<'v>,
-        #[starlark(default = NoneType)] _builder: Value<'v>,
+        #[starlark(default = NoneType)] sounds: Value<'v>,
+        #[starlark(default = NoneType)] builder: Value<'v>,
         eval: &mut Evaluator<'v, '_, '_>,
     ) -> anyhow::Result<Value<'v>> {
-        Ok(alloc_field(
-            eval.heap(),
-            SchemaField {
-                kind: "notification".to_string(),
+        let sounds = collect_sounds(sounds)?;
+        let builder_handler = handler_function_name(builder);
+        Ok(eval.heap().alloc(StarlarkNotification {
+            inner: Notification {
                 id: id.to_string(),
                 name: name.to_string(),
                 description: desc.to_string(),
                 icon: icon.to_string(),
-                default: None,
-                secret: None,
-                options: None,
-                source: None,
-                handler_name: None,
-                palette: None,
-                client_id: None,
-                authorization_endpoint: None,
-                scopes: None,
+                sounds,
+                builder_handler,
             },
-        ))
+        }))
     }
 
     fn Handler<'v>(
@@ -991,16 +1210,31 @@ pub fn schema_module(builder: &mut GlobalsBuilder) {
     fn Sound<'v>(
         id: &str,
         title: &str,
-        path: &str,
+        #[starlark(default = NoneType)] file: Value<'v>,
+        #[starlark(default = "")] path: &str,
         eval: &mut Evaluator<'v, '_, '_>,
     ) -> anyhow::Result<Value<'v>> {
-        use starlark::values::structs::AllocStruct;
-        let heap = eval.heap();
-        Ok(heap.alloc(AllocStruct([
-            ("id", heap.alloc(id)),
-            ("title", heap.alloc(title)),
-            ("path", heap.alloc(path)),
-        ])))
+        // pixlet's signature is Sound(id, title, file) and reads path from the
+        // file object (.reference/pixlet/schema/sound.go:38-44). We accept a bare
+        // `path=` string as a convenience fallback, but `file=` is the canonical
+        // form.
+        let resolved_path = if !file.is_none() {
+            let f = file.downcast_ref::<StarlarkFile>().ok_or_else(|| {
+                anyhow::anyhow!("Sound file must be a file value, got {}", file.get_type())
+            })?;
+            f.path.clone()
+        } else if !path.is_empty() {
+            path.to_string()
+        } else {
+            return Err(anyhow::anyhow!("schema.Sound requires a file= (or path=)"));
+        };
+        Ok(eval.heap().alloc(StarlarkSound {
+            inner: SchemaSound {
+                id: id.to_string(),
+                title: title.to_string(),
+                path: resolved_path,
+            },
+        }))
     }
 }
 

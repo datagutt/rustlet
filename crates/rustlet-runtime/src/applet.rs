@@ -2354,4 +2354,96 @@ def main(config):
         let json = schema_json_for(src).unwrap();
         assert!(json.contains("\"text\""), "got: {json}");
     }
+
+    #[test]
+    fn schema_notifications_emit_populated_array() {
+        let src = concat!(
+            "load(\"schema.star\", \"schema\")\n",
+            "def build(config):\n",
+            "    return []\n",
+            "def get_schema():\n",
+            "    return schema.Schema(\n",
+            "        fields = [schema.Text(id = \"t\", name = \"T\", desc = \"d\", icon = \"i\", default = \"x\")],\n",
+            "        notifications = [\n",
+            "            schema.Notification(\n",
+            "                id = \"n1\", name = \"N\", desc = \"d\", icon = \"i\",\n",
+            "                sounds = [schema.Sound(id = \"s1\", title = \"Boop\", path = \"boop.wav\")],\n",
+            "                builder = build,\n",
+            "            ),\n",
+            "        ],\n",
+            "    )\n",
+        );
+        let json = schema_json_for(src).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        // Notification stays out of the field array and lands in `notifications`.
+        assert_eq!(v["schema"].as_array().unwrap().len(), 1);
+        let notifs = v["notifications"].as_array().unwrap();
+        assert_eq!(notifs.len(), 1);
+        assert_eq!(notifs[0]["type"], "notification");
+        assert_eq!(notifs[0]["id"], "n1");
+        assert_eq!(notifs[0]["sounds"][0]["id"], "s1");
+        assert_eq!(notifs[0]["sounds"][0]["title"], "Boop");
+        assert_eq!(notifs[0]["sounds"][0]["path"], "boop.wav");
+    }
+
+    #[test]
+    fn schema_notification_in_fields_is_rejected() {
+        let src = concat!(
+            "load(\"schema.star\", \"schema\")\n",
+            "def get_schema():\n",
+            "    return schema.Schema(fields = [schema.Notification(id = \"n\", name = \"N\", desc = \"d\", icon = \"i\", sounds = [schema.Sound(id = \"s\", title = \"T\", path = \"a.wav\")])])\n",
+        );
+        let err = schema_json_for(src).unwrap_err();
+        assert!(err.to_string().contains("notifications"), "got: {err}");
+    }
+
+    #[test]
+    fn schema_without_notifications_omits_key() {
+        // pixlet tags Notifications `omitempty`; with none, the key is absent.
+        let src = concat!(
+            "load(\"schema.star\", \"schema\")\n",
+            "def get_schema():\n",
+            "    return schema.Schema(fields = [schema.Text(id = \"t\", name = \"T\", desc = \"d\", icon = \"i\", default = \"x\")])\n",
+        );
+        let json = schema_json_for(src).unwrap();
+        assert!(
+            !json.contains("notifications"),
+            "expected notifications key omitted, got: {json}"
+        );
+    }
+
+    #[test]
+    fn schema_sound_reads_path_from_file() {
+        let applet = Applet::new();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("alert.wav"), b"RIFF").unwrap();
+        let src = concat!(
+            "load(\"schema.star\", \"schema\")\n",
+            "load(\"alert.wav\", alert = \"file\")\n",
+            "def get_schema():\n",
+            "    return schema.Schema(\n",
+            "        notifications = [\n",
+            "            schema.Notification(\n",
+            "                id = \"n\", name = \"N\", desc = \"d\", icon = \"i\",\n",
+            "                sounds = [schema.Sound(id = \"s\", title = \"Alert\", file = alert)],\n",
+            "            ),\n",
+            "        ],\n",
+            "    )\n",
+        );
+        let json = applet.schema_json("m.star", src, Some(dir.path())).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let got = v["notifications"][0]["sounds"][0]["path"].as_str().unwrap();
+        assert!(got.ends_with("alert.wav"), "expected file path, got: {got}");
+    }
+
+    #[test]
+    fn schema_notification_requires_sounds() {
+        let src = concat!(
+            "load(\"schema.star\", \"schema\")\n",
+            "def get_schema():\n",
+            "    return schema.Schema(notifications = [schema.Notification(id = \"n\", name = \"N\", desc = \"d\", icon = \"i\")])\n",
+        );
+        let err = schema_json_for(src).unwrap_err();
+        assert!(err.to_string().contains("sound"), "got: {err}");
+    }
 }
