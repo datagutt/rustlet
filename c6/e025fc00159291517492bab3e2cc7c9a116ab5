@@ -1,0 +1,53 @@
+crates/rustlet-cli/src/commands/serve/handlers.rs
+  s_d3b38f22d24122::t_d73a7bb483ec48 559,569
+  s_d3b38f22d24122::t_ef9494002cd190 277-278,292
+  s_d3b38f22d24122::t_4d0e5288c66303 474-484,488-492,496-504
+  s_d3b38f22d24122::t_386488eb542057 600-606,609,611,614-615,619-626
+  s_d3b38f22d24122::t_bdafab2cb9e504 119-120,133
+  s_d3b38f22d24122::t_ddff25a9f42f6a 399-400,413
+crates/rustlet-runtime/src/applet.rs
+  s_d3b38f22d24122::t_88d7df27976702 727-778
+  s_d3b38f22d24122::t_56a149d459ff1f 143
+  s_d3b38f22d24122::t_b0cf485f6a1960 78
+  s_d3b38f22d24122::t_fc6de364c93f26 203
+  s_d3b38f22d24122::t_54465f9fd5d19c 264,372,403
+  s_d3b38f22d24122::t_e65de37b75d0d1 128
+  s_d3b38f22d24122::t_062a3247638908 2040
+  s_d3b38f22d24122::t_484dbe2d1633a7 61-65
+crates/rustlet-runtime/src/time_module.rs
+  s_d3b38f22d24122::t_eca30834e15aba 1-2,10-30,34-40
+  s_d3b38f22d24122::t_927ae61a1444f4 89-91
+crates/rustlet-cli/src/commands/api.rs
+  s_d3b38f22d24122::t_98472590e67ae4 156
+  s_d3b38f22d24122::t_431f487faad371 81-82
+crates/rustlet-cli/src/main.rs
+  s_d3b38f22d24122::t_3edff45a7424e6 148-153
+  s_d3b38f22d24122::t_1395e9685c113b 617
+  s_d3b38f22d24122::t_d8537f746191be 632-637
+  s_d3b38f22d24122::t_5fddf76e5eae95 670
+  s_d3b38f22d24122::t_d042e8516f039d 685
+crates/rustlet-cli/src/util.rs
+  s_d3b38f22d24122::t_755c81db2a07aa 288-291
+  s_d3b38f22d24122::t_90983fb4b3dc90 306
+  s_d3b38f22d24122::t_9aabbd5ff24d70 350
+crates/rustlet-cli/src/commands/profile.rs
+  s_d3b38f22d24122::t_4d18d53dc9b983 77
+README.md
+  s_d3b38f22d24122::t_f84b697384e78f 158-161
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "c6e025fc00159291517492bab3e2cc7c9a116ab5",
+  "prompts": {},
+  "sessions": {
+    "s_d3b38f22d24122": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "174fbf78-009c-41cc-9fc0-444064afe6fb",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "datagutt <datagutt@lekanger.no>"
+    }
+  }
+}
