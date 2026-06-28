@@ -143,9 +143,29 @@ pub fn parse_config_args(
     if let Some(path) = config_file {
         let text = std::fs::read_to_string(path)
             .with_context(|| format!("reading config file {}", path.display()))?;
-        let parsed: HashMap<String, String> = serde_json::from_str(&text)
+        // pixlet decodes the config file into map[string]any, so values may be
+        // numbers/bools/nested JSON. The applet config map is string-typed (as
+        // the positional k=v overrides are), so coerce scalars to their string
+        // form and serialize arrays/objects back to compact JSON.
+        let parsed: serde_json::Map<String, serde_json::Value> = serde_json::from_str(&text)
             .with_context(|| format!("parsing config file {}", path.display()))?;
-        config.extend(parsed);
+        for (k, v) in parsed {
+            match v {
+                serde_json::Value::Null => {}
+                serde_json::Value::String(s) => {
+                    config.insert(k, s);
+                }
+                serde_json::Value::Bool(b) => {
+                    config.insert(k, b.to_string());
+                }
+                serde_json::Value::Number(n) => {
+                    config.insert(k, n.to_string());
+                }
+                other => {
+                    config.insert(k, serde_json::to_string(&other).unwrap_or_default());
+                }
+            }
+        }
     }
 
     let (path, remaining_kv): (Option<PathBuf>, &[String]) = if let Some(first) = args.first() {
@@ -471,5 +491,33 @@ mod tests {
         assert!(!resolve_2x(true, false), "requested + unsupported -> 1x");
         assert!(!resolve_2x(false, true), "not requested + supported -> 1x (no auto-promote)");
         assert!(!resolve_2x(false, false), "neither -> 1x");
+    }
+
+    #[test]
+    fn config_file_coerces_scalar_values() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = dir.path().join("c.json");
+        std::fs::write(
+            &cfg,
+            r#"{"name": "x", "count": 5, "enabled": true, "ratio": 1.5, "nope": null}"#,
+        )
+        .unwrap();
+        let inputs = parse_config_args(&[], Some(&cfg)).unwrap();
+        assert_eq!(inputs.config.get("name").map(String::as_str), Some("x"));
+        assert_eq!(inputs.config.get("count").map(String::as_str), Some("5"));
+        assert_eq!(inputs.config.get("enabled").map(String::as_str), Some("true"));
+        assert_eq!(inputs.config.get("ratio").map(String::as_str), Some("1.5"));
+        // null is skipped (not stored as a string).
+        assert!(!inputs.config.contains_key("nope"));
+    }
+
+    #[test]
+    fn positional_kv_overrides_config_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = dir.path().join("c.json");
+        std::fs::write(&cfg, r#"{"count": 5}"#).unwrap();
+        let args = vec!["count=9".to_string()];
+        let inputs = parse_config_args(&args, Some(&cfg)).unwrap();
+        assert_eq!(inputs.config.get("count").map(String::as_str), Some("9"));
     }
 }
