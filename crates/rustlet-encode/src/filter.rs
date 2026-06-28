@@ -166,9 +166,11 @@ pub fn apply_filter(frames: &mut [Pixmap], filter: Filter) {
 ///
 /// Returns new pixmaps with dimensions `width * factor` by `height * factor`.
 /// Factor <= 1 returns clones of the input frames.
-pub fn magnify(frames: &[Pixmap], factor: u32) -> Vec<Pixmap> {
+/// Returns an error if the resulting dimensions would overflow `u32` or exceed
+/// what `tiny_skia` can allocate.
+pub fn magnify(frames: &[Pixmap], factor: u32) -> anyhow::Result<Vec<Pixmap>> {
     if factor <= 1 {
-        return frames.to_vec();
+        return Ok(frames.to_vec());
     }
 
     frames
@@ -176,9 +178,15 @@ pub fn magnify(frames: &[Pixmap], factor: u32) -> Vec<Pixmap> {
         .map(|pixmap| {
             let w = pixmap.width();
             let h = pixmap.height();
-            let new_w = w * factor;
-            let new_h = h * factor;
-            let mut out = Pixmap::new(new_w, new_h).expect("magnified pixmap dimensions overflow");
+            let new_w = w
+                .checked_mul(factor)
+                .ok_or_else(|| anyhow::anyhow!("magnify overflow: {w} * {factor}"))?;
+            let new_h = h
+                .checked_mul(factor)
+                .ok_or_else(|| anyhow::anyhow!("magnify overflow: {h} * {factor}"))?;
+            let mut out = Pixmap::new(new_w, new_h).ok_or_else(|| {
+                anyhow::anyhow!("magnified dimensions too large: {new_w}x{new_h}")
+            })?;
 
             let src = pixmap.data();
             let dst = out.data_mut();
@@ -201,7 +209,7 @@ pub fn magnify(frames: &[Pixmap], factor: u32) -> Vec<Pixmap> {
                 }
             }
 
-            out
+            Ok(out)
         })
         .collect()
 }
@@ -266,7 +274,7 @@ mod tests {
     #[test]
     fn magnify_doubles_dimensions() {
         let frames = vec![opaque_frame(4, 3, 255, 0, 0)];
-        let result = magnify(&frames, 2);
+        let result = magnify(&frames, 2).unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].width(), 8);
         assert_eq!(result[0].height(), 6);
@@ -275,7 +283,7 @@ mod tests {
     #[test]
     fn magnify_factor_one_unchanged() {
         let frames = vec![opaque_frame(4, 3, 128, 64, 32)];
-        let result = magnify(&frames, 1);
+        let result = magnify(&frames, 1).unwrap();
         assert_eq!(result[0].width(), 4);
         assert_eq!(result[0].height(), 3);
         assert_eq!(result[0].data(), frames[0].data());
@@ -284,13 +292,23 @@ mod tests {
     #[test]
     fn magnify_preserves_pixel_values() {
         let frames = vec![opaque_frame(2, 2, 200, 100, 50)];
-        let result = magnify(&frames, 3);
+        let result = magnify(&frames, 3).unwrap();
 
         // Every pixel in the magnified output should match the source
         let expected = frames[0].pixels()[0];
         for pixel in result[0].pixels() {
             assert_eq!(*pixel, expected);
         }
+    }
+
+    #[test]
+    fn magnify_overflow_returns_error() {
+        let frames = vec![Pixmap::new(64, 32).unwrap()];
+        let err = magnify(&frames, u32::MAX).unwrap_err();
+        assert!(
+            err.to_string().contains("overflow") || err.to_string().contains("too large"),
+            "got: {err}"
+        );
     }
 
     #[test]

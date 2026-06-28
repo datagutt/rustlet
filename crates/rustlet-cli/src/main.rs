@@ -692,7 +692,7 @@ fn run() -> Result<ExitCode> {
             let delay_ms = root.delay as u16;
 
             rustlet_encode::apply_filter(&mut frames, color_filter);
-            let frames = rustlet_encode::magnify(&frames, magnify);
+            let frames = rustlet_encode::magnify(&frames, magnify)?;
 
             let data = rustlet_encode::encode_with_max_duration(
                 &frames,
