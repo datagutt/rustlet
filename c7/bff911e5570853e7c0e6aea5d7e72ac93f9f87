@@ -1,0 +1,33 @@
+PIXLET_COMPATIBILITY_TODO.md
+  s_d3b38f22d24122::t_fac3708db30fd6 56
+  s_d3b38f22d24122::t_e9e7b37011c4d0 62-63,65-67
+  s_d3b38f22d24122::t_2ba72596732347 150
+  s_d3b38f22d24122::t_08e6d693b904f7 3-9
+README.md
+  s_d3b38f22d24122::t_e51ef30ae6e5cb 184-187
+  s_d3b38f22d24122::t_9e188d814fe9a7 125-142,145-146
+  s_d3b38f22d24122::t_cd196a3ce65fa5 194
+  s_d3b38f22d24122::t_1bd9a1aa2a13b2 158-162
+  s_d3b38f22d24122::t_f400b618ae86ae 147
+CLAUDE.md
+  s_d3b38f22d24122::t_f4ef90b985b606 33-34
+  s_d3b38f22d24122::t_2a0afdbcbd84f8 53
+  s_d3b38f22d24122::t_22bd8ae8917c04 16
+  s_d3b38f22d24122::t_c93fd3f9957494 68-69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "c7bff911e5570853e7c0e6aea5d7e72ac93f9f87",
+  "prompts": {},
+  "sessions": {
+    "s_d3b38f22d24122": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "174fbf78-009c-41cc-9fc0-444064afe6fb",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "datagutt <datagutt@lekanger.no>"
+    }
+  }
+}
