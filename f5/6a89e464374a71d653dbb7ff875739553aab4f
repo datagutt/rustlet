@@ -1,0 +1,31 @@
+crates/rustlet-cli/src/commands/mod.rs
+  s_d3b38f22d24122::t_3eac83df60e4f8 10
+crates/rustlet-cli/src/commands/login.rs
+  s_d3b38f22d24122::t_e206ce9920a817 1-55
+crates/rustlet-cli/src/main.rs
+  s_d3b38f22d24122::t_31d21ee28c77c9 175,178-179
+  s_d3b38f22d24122::t_01e04845cb1300 236-242
+  s_d3b38f22d24122::t_9bcedbfc36ecc1 192,201,218
+  s_d3b38f22d24122::t_0ae1f55f686ffc 779-781
+  s_d3b38f22d24122::t_aead4c11f83197 180,195,204,221
+crates/rustlet-cli/src/config.rs
+  s_d3b38f22d24122::t_1edd0f573e86d7 96-111,113-114,121-143
+  s_d3b38f22d24122::t_df4cea56b0bb93 170-200
+  s_d3b38f22d24122::t_f857f5d3dc59fc 17-21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "f56a89e464374a71d653dbb7ff875739553aab4f",
+  "prompts": {},
+  "sessions": {
+    "s_d3b38f22d24122": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "174fbf78-009c-41cc-9fc0-444064afe6fb",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "datagutt <datagutt@lekanger.no>"
+    }
+  }
+}
