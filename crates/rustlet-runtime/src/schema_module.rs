@@ -74,6 +74,121 @@ pub fn encode_handler_result(return_type: i8, value: Value<'_>) -> anyhow::Resul
     }
 }
 
+/// Valid schema field types, mirroring pixlet's `oneof` validation tag
+/// (.reference/pixlet/schema/schema.go:40).
+const SCHEMA_FIELD_TYPES: &[&str] = &[
+    "color",
+    "datetime",
+    "dropdown",
+    "generated",
+    "location",
+    "locationbased",
+    "onoff",
+    "radio",
+    "text",
+    "typeahead",
+    "oauth2",
+    "oauth1",
+    "png",
+    "notification",
+];
+
+/// Normalize a hex color to pixlet's form: lowercase, strip one optional leading
+/// `#`, require exactly 3 or 6 hex digits, re-prefix `#`. Mirrors pixlet's
+/// `normalizeHexColor` (schema/color.go:19) — notably it does NOT expand the
+/// 3-digit form, so emitted JSON stays byte-compatible with pixlet.
+fn normalize_hex_color(hex: &str) -> anyhow::Result<String> {
+    let lower = hex.to_ascii_lowercase();
+    let h = lower.strip_prefix('#').unwrap_or(&lower);
+    if h.len() != 3 && h.len() != 6 {
+        return Err(anyhow::anyhow!(
+            "expected 3 or 6 hex chars but found {}",
+            h.len()
+        ));
+    }
+    if !h.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(anyhow::anyhow!("expected hex chars a-f,0-9 but found {h}"));
+    }
+    Ok(format!("#{h}"))
+}
+
+/// Validate a schema against pixlet's struct-tag rules
+/// (.reference/pixlet/schema/schema.go:40-60). Catches malformed schemas locally
+/// instead of deferring to the backend. The notification `Sounds` rule is
+/// intentionally deferred to plan 011.
+pub fn validate_schema(schema: &StarlarkSchemaSchema) -> anyhow::Result<()> {
+    for f in &schema.fields {
+        let id = &f.id;
+        let kind = f.kind.as_str();
+
+        if !SCHEMA_FIELD_TYPES.contains(&kind) {
+            return Err(anyhow::anyhow!("schema field {id:?} has unknown type {kind:?}"));
+        }
+        if f.id.is_empty() {
+            return Err(anyhow::anyhow!("schema field of type {kind:?} is missing a required id"));
+        }
+        if f.id.contains('$') {
+            return Err(anyhow::anyhow!("schema field id {id:?} must not contain '$'"));
+        }
+        if matches!(
+            kind,
+            "datetime" | "dropdown" | "location" | "locationbased" | "onoff" | "radio" | "text"
+                | "typeahead" | "png"
+        ) && f.name.is_empty()
+        {
+            return Err(anyhow::anyhow!("schema field {id:?} of type {kind:?} requires a name"));
+        }
+        if kind == "generated" && !f.icon.is_empty() {
+            return Err(anyhow::anyhow!("schema field {id:?} of type generated must not set an icon"));
+        }
+        if matches!(kind, "dropdown" | "onoff" | "radio")
+            && f.default.as_deref().unwrap_or("").is_empty()
+        {
+            return Err(anyhow::anyhow!("schema field {id:?} of type {kind:?} requires a default"));
+        }
+        if matches!(kind, "dropdown" | "radio") && f.options.as_deref().unwrap_or(&[]).is_empty() {
+            return Err(anyhow::anyhow!("schema field {id:?} of type {kind:?} requires options"));
+        }
+        if kind == "generated" && f.source.as_deref().unwrap_or("").is_empty() {
+            return Err(anyhow::anyhow!("schema field {id:?} of type generated requires a source"));
+        }
+        if matches!(kind, "generated" | "locationbased" | "typeahead" | "oauth2")
+            && f.handler_name.as_deref().unwrap_or("").is_empty()
+        {
+            return Err(anyhow::anyhow!("schema field {id:?} of type {kind:?} requires a handler"));
+        }
+        if kind == "oauth2" {
+            if f.client_id.as_deref().unwrap_or("").is_empty() {
+                return Err(anyhow::anyhow!("schema field {id:?} of type oauth2 requires a client_id"));
+            }
+            if f.authorization_endpoint.as_deref().unwrap_or("").is_empty() {
+                return Err(anyhow::anyhow!(
+                    "schema field {id:?} of type oauth2 requires an authorization_endpoint"
+                ));
+            }
+            if f.scopes.as_deref().unwrap_or(&[]).is_empty() {
+                return Err(anyhow::anyhow!("schema field {id:?} of type oauth2 requires scopes"));
+            }
+        }
+        if f.secret == Some(true) && kind != "text" {
+            return Err(anyhow::anyhow!(
+                "schema field {id:?} of type {kind:?} must not set secret (allowed only for text)"
+            ));
+        }
+        if let Some(opts) = &f.options {
+            for (i, o) in opts.iter().enumerate() {
+                if o.text.is_empty() {
+                    return Err(anyhow::anyhow!("schema field {id:?} option {i} requires text"));
+                }
+                if o.value.is_empty() {
+                    return Err(anyhow::anyhow!("schema field {id:?} option {i} requires a value"));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 // Custom Starlark schema values that serialize to Pixlet-compatible JSON.
 //
 // Each schema constructor returns a `StarlarkSchemaField`. `Schema(...)` returns a
@@ -757,7 +872,19 @@ pub fn schema_module(builder: &mut GlobalsBuilder) {
         #[starlark(default = NoneType)] palette: Value<'v>,
         eval: &mut Evaluator<'v, '_, '_>,
     ) -> anyhow::Result<Value<'v>> {
-        let palette = collect_string_list(palette)?;
+        let default = normalize_hex_color(default)
+            .map_err(|e| anyhow::anyhow!("malformed default color: {e}"))?;
+        let palette = collect_string_list(palette)?
+            .map(|list| {
+                list.iter()
+                    .enumerate()
+                    .map(|(i, c)| {
+                        normalize_hex_color(c)
+                            .map_err(|e| anyhow::anyhow!("malformed palette color at index {i}: {e}"))
+                    })
+                    .collect::<anyhow::Result<Vec<_>>>()
+            })
+            .transpose()?;
         Ok(alloc_field(
             eval.heap(),
             SchemaField {
@@ -766,7 +893,7 @@ pub fn schema_module(builder: &mut GlobalsBuilder) {
                 name: name.to_string(),
                 description: desc.to_string(),
                 icon: icon.to_string(),
-                default: Some(default.to_string()),
+                default: Some(default),
                 secret: None,
                 options: None,
                 source: None,

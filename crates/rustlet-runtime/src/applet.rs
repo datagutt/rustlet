@@ -421,6 +421,8 @@ impl Applet {
             .downcast_ref::<StarlarkSchemaSchema>()
             .ok_or_else(|| anyhow!("get_schema() must return a Schema, got {}", result.get_type()))?;
 
+        crate::schema_module::validate_schema(schema)?;
+
         let json = schema.to_json();
         serde_json::to_string_pretty(&json).map_err(|e| anyhow!("JSON encode error: {e}"))
     }
@@ -2264,5 +2266,92 @@ def main(config):
             .call_schema_handler("m.star", src, None, "ht", &config, "")
             .unwrap();
         assert_eq!(out, "0123");
+    }
+
+    fn schema_json_for(src: &str) -> Result<String> {
+        Applet::new().schema_json("m.star", src, None)
+    }
+
+    #[test]
+    fn schema_validation_rejects_dropdown_without_options() {
+        let src = concat!(
+            "load(\"schema.star\", \"schema\")\n",
+            "def get_schema():\n",
+            "    return schema.Schema(fields = [schema.Dropdown(id = \"d\", name = \"D\", desc = \"x\", icon = \"i\", default = \"a\", options = [])])\n",
+        );
+        let err = schema_json_for(src).unwrap_err();
+        assert!(err.to_string().contains("options"), "got: {err}");
+    }
+
+    #[test]
+    fn schema_validation_accepts_valid_dropdown() {
+        let src = concat!(
+            "load(\"schema.star\", \"schema\")\n",
+            "def get_schema():\n",
+            "    return schema.Schema(fields = [schema.Dropdown(id = \"d\", name = \"D\", desc = \"x\", icon = \"i\", default = \"a\", options = [schema.Option(display = \"A\", value = \"a\")])])\n",
+        );
+        let json = schema_json_for(src).unwrap();
+        assert!(json.contains("\"dropdown\""), "got: {json}");
+    }
+
+    #[test]
+    fn schema_validation_rejects_oauth2_without_scopes() {
+        let src = concat!(
+            "load(\"schema.star\", \"schema\")\n",
+            "def auth(pattern):\n",
+            "    return \"x\"\n",
+            "def get_schema():\n",
+            "    return schema.Schema(fields = [schema.OAuth2(id = \"o\", name = \"n\", desc = \"d\", icon = \"i\", handler = auth, client_id = \"c\", authorization_endpoint = \"https://e\")])\n",
+        );
+        let err = schema_json_for(src).unwrap_err();
+        assert!(err.to_string().contains("scopes"), "got: {err}");
+    }
+
+    #[test]
+    fn schema_validation_accepts_complete_oauth2() {
+        let src = concat!(
+            "load(\"schema.star\", \"schema\")\n",
+            "def auth(pattern):\n",
+            "    return \"x\"\n",
+            "def get_schema():\n",
+            "    return schema.Schema(fields = [schema.OAuth2(id = \"o\", name = \"n\", desc = \"d\", icon = \"i\", handler = auth, client_id = \"c\", authorization_endpoint = \"https://e\", scopes = [\"read\"])])\n",
+        );
+        let json = schema_json_for(src).unwrap();
+        assert!(json.contains("\"oauth2\""), "got: {json}");
+    }
+
+    #[test]
+    fn schema_color_normalizes_three_digit_hex() {
+        // pixlet lowercases and validates but does NOT expand 3->6 digits.
+        let src = concat!(
+            "load(\"schema.star\", \"schema\")\n",
+            "def get_schema():\n",
+            "    return schema.Schema(fields = [schema.Color(id = \"c\", name = \"C\", desc = \"d\", icon = \"i\", default = \"#ABC\")])\n",
+        );
+        let json = schema_json_for(src).unwrap();
+        assert!(json.contains("\"#abc\""), "expected normalized #abc, got: {json}");
+    }
+
+    #[test]
+    fn schema_color_rejects_invalid_hex() {
+        let src = concat!(
+            "load(\"schema.star\", \"schema\")\n",
+            "def get_schema():\n",
+            "    return schema.Schema(fields = [schema.Color(id = \"c\", name = \"C\", desc = \"d\", icon = \"i\", default = \"zzz\")])\n",
+        );
+        let err = schema_json_for(src).unwrap_err();
+        assert!(err.to_string().contains("color"), "got: {err}");
+    }
+
+    #[test]
+    fn schema_validation_accepts_valid_text_schema() {
+        // A representative valid schema serializes without false positives.
+        let src = concat!(
+            "load(\"schema.star\", \"schema\")\n",
+            "def get_schema():\n",
+            "    return schema.Schema(fields = [schema.Text(id = \"t\", name = \"T\", desc = \"d\", icon = \"i\", default = \"hi\")])\n",
+        );
+        let json = schema_json_for(src).unwrap();
+        assert!(json.contains("\"text\""), "got: {json}");
     }
 }
