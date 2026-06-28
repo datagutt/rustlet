@@ -233,12 +233,12 @@ impl Widget for WrappedText {
         let line_h = font.measure_height();
         let spacing = self.line_spacing.max(0);
 
+        // `width` only drives line wrapping, not horizontal clipping: pixlet
+        // lets a word too long to wrap overflow past the width (like the
+        // single-line Text widget) and clips horizontally only at the canvas
+        // edge. `height`, however, does bound the drawn area vertically: lines
+        // past it are clipped, so keep the vertical clip.
         let wrap_width = if self.width > 0 {
-            self.width
-        } else {
-            bounds.width
-        };
-        let clip_width = if self.width > 0 {
             self.width
         } else {
             bounds.width
@@ -248,7 +248,6 @@ impl Widget for WrappedText {
         } else {
             bounds.height
         };
-        let clip_right = bounds.x + clip_width;
         let clip_bottom = bounds.y + clip_height;
         let lines = self.wrap_lines(wrap_width);
 
@@ -291,7 +290,6 @@ impl Widget for WrappedText {
                                     - glyph.height as i32
                                     + row as i32;
                                 if px >= bounds.x
-                                    && px < clip_right
                                     && (px as usize) < dst_w
                                     && py >= bounds.y
                                     && py < clip_bottom

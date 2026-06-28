@@ -56,8 +56,7 @@
       "kind": "fixture",
       "path": "fixtures/text_tomthumb_wrap.star",
       "output_format": "webp",
-      "policy": "known_diff",
-      "reason": "baseline+height fixed (plan 013); remaining diff is a separate divergence: rustlet clips wrapped glyphs at the WrappedText width while pixlet overflows long words"
+      "policy": "exact"
     },
     {
       "id": "text_missing_glyph_fixture",
