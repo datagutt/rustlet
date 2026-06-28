@@ -57,7 +57,7 @@
       "path": "fixtures/text_tomthumb_wrap.star",
       "output_format": "webp",
       "policy": "known_diff",
-      "reason": "WrappedText glyph baseline + reported height bug — flip to exact when plan 013 lands"
+      "reason": "baseline+height fixed (plan 013); remaining diff is a separate divergence: rustlet clips wrapped glyphs at the WrappedText width while pixlet overflows long words"
     },
     {
       "id": "text_missing_glyph_fixture",

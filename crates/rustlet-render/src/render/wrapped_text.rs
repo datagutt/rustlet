@@ -204,11 +204,10 @@ impl Widget for WrappedText {
             }
         }
 
-        let total_h = if lines.is_empty() {
-            0
-        } else {
-            lines.len() as i32 * line_h + (lines.len() as i32 - 1) * spacing
-        };
+        // Include trailing line-spacing for every line, matching pixlet's
+        // PaintBounds (which accumulates lineHeight + lineSpacing per line), so
+        // layouts with linespacing > 0 don't under-report the widget height.
+        let total_h = lines.len() as i32 * (line_h + spacing);
 
         let width = if self.width > 0 {
             self.width
@@ -276,6 +275,11 @@ impl Widget for WrappedText {
             };
 
             let mut cursor_x = bounds.x + x_offset;
+            // pixlet baseline-positions each glyph (DrawStringAnchored). Match
+            // the single-line Text widget so fonts with non-uniform glyph
+            // heights/y-offsets (e.g. tom-thumb) align to the baseline instead
+            // of floating to the top of the line.
+            let line_baseline = cursor_y + font.ascent;
 
             for ch in visual_line.chars() {
                 if let Some(glyph) = font.glyph(ch) {
@@ -283,7 +287,9 @@ impl Widget for WrappedText {
                         for col in 0..glyph.width as u8 {
                             if glyph.pixel(col, row) {
                                 let px = cursor_x + glyph.x_offset as i32 + col as i32;
-                                let py = cursor_y + row as i32;
+                                let py = line_baseline - glyph.y_offset as i32
+                                    - glyph.height as i32
+                                    + row as i32;
                                 if px >= bounds.x
                                     && px < clip_right
                                     && (px as usize) < dst_w
@@ -496,6 +502,33 @@ mod tests {
         assert!(
             auto_x > left_x,
             "rtl auto-align should shift visible text right"
+        );
+    }
+
+    #[test]
+    fn tomthumb_descender_drops_below_baseline() {
+        // With baseline alignment, a descender (g, BBX y-offset -1 in tom-thumb)
+        // paints rows below a non-descender (o); top-alignment would not.
+        let lowest_row = |content: &str| -> i32 {
+            let mut pm = Pixmap::new(16, 16).unwrap();
+            WrappedText::new(content)
+                .with_font("tom-thumb")
+                .with_width(16)
+                .paint(&mut pm, Rect::new(0, 0, 16, 16), 0);
+            let w = pm.width() as i32;
+            pm.pixels()
+                .iter()
+                .enumerate()
+                .filter(|(_, p)| p.alpha() > 0)
+                .map(|(i, _)| i as i32 / w)
+                .max()
+                .expect("text should paint some pixels")
+        };
+        assert!(
+            lowest_row("g") > lowest_row("o"),
+            "descender g should reach below o: g={} o={}",
+            lowest_row("g"),
+            lowest_row("o")
         );
     }
 }
