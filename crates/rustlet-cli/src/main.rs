@@ -172,11 +172,12 @@ enum Commands {
         background: bool,
 
         /// Base URL of the API (default: from config or RUSTLET_URL).
-        #[arg(long)]
+        #[arg(short = 'u', long)]
         url: Option<String>,
 
-        /// API token (default: from config or RUSTLET_TOKEN).
-        #[arg(long, env = config::ENV_TOKEN, hide_env_values = true)]
+        /// API token (default: from config or RUSTLET_TOKEN). `--api-token` is a
+        /// pixlet-compatible alias.
+        #[arg(short = 't', long, visible_alias = "api-token", env = config::ENV_TOKEN, hide_env_values = true)]
         token: Option<String>,
     },
 
@@ -188,19 +189,19 @@ enum Commands {
         /// Installation ID to remove.
         installation_id: String,
 
-        #[arg(long)]
+        #[arg(short = 'u', long)]
         url: Option<String>,
 
-        #[arg(long, env = config::ENV_TOKEN, hide_env_values = true)]
+        #[arg(short = 't', long, visible_alias = "api-token", env = config::ENV_TOKEN, hide_env_values = true)]
         token: Option<String>,
     },
 
     /// List devices registered to the configured account.
     Devices {
-        #[arg(long)]
+        #[arg(short = 'u', long)]
         url: Option<String>,
 
-        #[arg(long, env = config::ENV_TOKEN, hide_env_values = true)]
+        #[arg(short = 't', long, visible_alias = "api-token", env = config::ENV_TOKEN, hide_env_values = true)]
         token: Option<String>,
 
         /// Emit one device id per line (no display name). Used by dynamic
@@ -214,10 +215,10 @@ enum Commands {
         /// Device ID.
         device_id: String,
 
-        #[arg(long)]
+        #[arg(short = 'u', long)]
         url: Option<String>,
 
-        #[arg(long, env = config::ENV_TOKEN, hide_env_values = true)]
+        #[arg(short = 't', long, visible_alias = "api-token", env = config::ENV_TOKEN, hide_env_values = true)]
         token: Option<String>,
 
         /// Emit one installation id per line. Used by dynamic shell
@@ -231,6 +232,13 @@ enum Commands {
         #[command(subcommand)]
         action: ConfigAction,
     },
+
+    /// Authenticate against a Tronbyt/Tidbyt server.
+    ///
+    /// Prompts for the base URL and API token, verifies them by listing
+    /// devices, and persists them to the config file (chmod 0600 on unix). The
+    /// token is never printed. Mirrors pixlet's `login`.
+    Login,
 
     /// Run an HTTP render server for use by other tools.
     ///
@@ -767,6 +775,9 @@ fn run() -> Result<ExitCode> {
         }
         Commands::Config { action } => {
             commands::config_cmd::run(action)?;
+        }
+        Commands::Login => {
+            commands::login::run()?;
         }
         Commands::Api {
             host,

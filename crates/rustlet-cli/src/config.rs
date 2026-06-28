@@ -14,6 +14,11 @@ pub const TOKEN_KEY: &str = "token";
 pub const ENV_URL: &str = "RUSTLET_URL";
 pub const ENV_TOKEN: &str = "RUSTLET_TOKEN";
 
+// pixlet's own credential env vars, honored as a fallback so existing pixlet
+// setups keep working (.reference/pixlet/cmd/flags/api_credentials.go).
+pub const ENV_PIXLET_URL: &str = "PIXLET_URL";
+pub const ENV_PIXLET_TOKEN: &str = "PIXLET_TOKEN";
+
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct Config {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -88,34 +93,54 @@ pub fn get_value(key: &str) -> Result<Option<String>> {
     }
 }
 
+/// Apply the credential precedence to candidate values: CLI flag >
+/// primary env (`RUSTLET_*`) > pixlet env (`PIXLET_*`) > persisted config file.
+/// Pure and side-effect free so the precedence is unit-testable without touching
+/// the real environment or config file.
+fn pick_credential(
+    cli: Option<&str>,
+    env_primary: Option<String>,
+    env_fallback: Option<String>,
+    cfg: Option<String>,
+) -> Option<String> {
+    cli.map(str::to_string)
+        .or(env_primary)
+        .or(env_fallback)
+        .or(cfg)
+}
+
 /// Resolve the base URL and bearer token for API calls. Precedence matches
-/// pixlet: CLI flag > environment variable > persisted config file. Returns a
-/// user-facing error pointing at `rustlet config set` when either is missing.
+/// pixlet: CLI flag > `RUSTLET_*` env > `PIXLET_*` env > persisted config file.
+/// Returns a user-facing error pointing at `rustlet login` when either is missing.
 pub fn resolve_credentials(
     cli_url: Option<&str>,
     cli_token: Option<&str>,
 ) -> Result<(String, String)> {
     let cfg = load().unwrap_or_default();
 
-    let url = cli_url
-        .map(str::to_string)
-        .or_else(|| std::env::var(ENV_URL).ok())
-        .or(cfg.url)
-        .ok_or_else(|| {
-            anyhow!(
-                "API url not set. Use `rustlet config set url <url>`, pass --url, or set {ENV_URL}"
-            )
-        })?;
+    let url = pick_credential(
+        cli_url,
+        std::env::var(ENV_URL).ok(),
+        std::env::var(ENV_PIXLET_URL).ok(),
+        cfg.url,
+    )
+    .ok_or_else(|| {
+        anyhow!(
+            "API url not set. Run `rustlet login`, use `rustlet config set url <url>`, pass --url, or set {ENV_URL}"
+        )
+    })?;
 
-    let token = cli_token
-        .map(str::to_string)
-        .or_else(|| std::env::var(ENV_TOKEN).ok())
-        .or(cfg.token)
-        .ok_or_else(|| {
-            anyhow!(
-                "API token not set. Use `rustlet config set token <token>`, pass --token, or set {ENV_TOKEN}"
-            )
-        })?;
+    let token = pick_credential(
+        cli_token,
+        std::env::var(ENV_TOKEN).ok(),
+        std::env::var(ENV_PIXLET_TOKEN).ok(),
+        cfg.token,
+    )
+    .ok_or_else(|| {
+        anyhow!(
+            "API token not set. Run `rustlet login`, use `rustlet config set token <token>`, pass --token, or set {ENV_TOKEN}"
+        )
+    })?;
 
     Ok((url, token))
 }
@@ -141,5 +166,36 @@ mod tests {
         let back: Config = serde_yaml::from_str("").unwrap_or_default();
         assert!(back.url.is_none());
         assert!(back.token.is_none());
+    }
+
+    #[test]
+    fn credential_precedence_cli_over_rustlet_over_pixlet_over_config() {
+        // CLI flag wins over every other source.
+        assert_eq!(
+            pick_credential(
+                Some("cli"),
+                Some("rustlet".into()),
+                Some("pixlet".into()),
+                Some("cfg".into())
+            ),
+            Some("cli".to_string())
+        );
+        // RUSTLET_* beats the pixlet fallback and the config file.
+        assert_eq!(
+            pick_credential(None, Some("rustlet".into()), Some("pixlet".into()), Some("cfg".into())),
+            Some("rustlet".to_string())
+        );
+        // PIXLET_* fallback beats the config file.
+        assert_eq!(
+            pick_credential(None, None, Some("pixlet".into()), Some("cfg".into())),
+            Some("pixlet".to_string())
+        );
+        // Config file is the last resort.
+        assert_eq!(
+            pick_credential(None, None, None, Some("cfg".into())),
+            Some("cfg".to_string())
+        );
+        // Nothing set anywhere.
+        assert_eq!(pick_credential(None, None, None, None), None);
     }
 }

@@ -7,6 +7,7 @@ pub mod create;
 pub mod delete;
 pub mod devices;
 pub mod list;
+pub mod login;
 pub mod profile;
 pub mod push;
 pub mod serve;
