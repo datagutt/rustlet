@@ -150,12 +150,18 @@ fn validate_schema_icons(
             return Err(e);
         }
     };
+    validate_schema_icons_json(&schema_json)
+}
+
+/// Validate that each schema field's `icon` is a valid identifier. The emitted
+/// schema JSON has `schema` as an array of field objects (not an object with a
+/// `fields` key), so read the array directly.
+fn validate_schema_icons_json(schema_json: &str) -> Result<()> {
     let value: serde_json::Value =
-        serde_json::from_str(&schema_json).context("parsing schema json")?;
+        serde_json::from_str(schema_json).context("parsing schema json")?;
     let fields = value
         .get("schema")
-        .and_then(|s| s.get("fields"))
-        .and_then(|f| f.as_array())
+        .and_then(|s| s.as_array())
         .cloned()
         .unwrap_or_default();
     for field in &fields {
@@ -227,4 +233,29 @@ fn cross(path: &Path) -> String {
 
 fn dash(path: &Path) -> String {
     format!("- {}", path.display())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn icon_validation_reads_schema_array() {
+        // Emitted shape: `schema` is an array of field objects.
+        let bad = r#"{"version":"1","schema":[{"id":"x","icon":"bad icon!"}],"notifications":[]}"#;
+        let err = validate_schema_icons_json(bad).unwrap_err();
+        assert!(err.to_string().contains("bad icon!"), "got: {err}");
+    }
+
+    #[test]
+    fn icon_validation_accepts_valid_icon() {
+        let ok = r#"{"version":"1","schema":[{"id":"x","icon":"star"}],"notifications":[]}"#;
+        assert!(validate_schema_icons_json(ok).is_ok());
+    }
+
+    #[test]
+    fn icon_validation_skips_empty_icon() {
+        let ok = r#"{"version":"1","schema":[{"id":"x"}],"notifications":[]}"#;
+        assert!(validate_schema_icons_json(ok).is_ok());
+    }
 }
