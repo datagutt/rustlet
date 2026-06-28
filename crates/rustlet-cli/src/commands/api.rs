@@ -78,6 +78,8 @@ struct RenderRequest {
     is_2x: bool,
     #[serde(default)]
     locale: Option<String>,
+    #[serde(default)]
+    timezone: Option<String>,
 }
 
 pub fn run(args: Args) -> Result<()> {
@@ -151,6 +153,7 @@ async fn handle_render(
         color_filter,
         silent: state.silent,
         locale: req.locale,
+        timezone: req.timezone,
         format: state.format.output(),
         max_duration: Some(MAX_DURATION),
     };

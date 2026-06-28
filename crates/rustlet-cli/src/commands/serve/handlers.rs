@@ -116,8 +116,8 @@ pub async fn api_preview(
     maybe_save_config(&state, &config);
 
     let (scale_is_2x, _) = meta_scale(&config);
-    let locale = match meta_locale(&config) {
-        Ok(l) => l,
+    let (locale, timezone) = match meta_locale_timezone(&config) {
+        Ok(v) => v,
         Err(e) => return bad_request(&e),
     };
     let stripped = strip_meta_keys(&config);
@@ -130,7 +130,7 @@ pub async fn api_preview(
     let timeout = state.timeout;
 
     let join = tokio::task::spawn_blocking(move || {
-        render_config(&path, &stripped, width, height, is_2x, OutputFormat::WebP, max_duration, locale)
+        render_config(&path, &stripped, width, height, is_2x, OutputFormat::WebP, max_duration, locale, timezone)
     });
     let bytes = match tokio::time::timeout(timeout, join).await {
         Ok(Ok(Ok(b))) => b,
@@ -274,8 +274,8 @@ pub async fn api_push(
             config.insert(k, v.to_string());
         }
     }
-    let locale = match meta_locale(&config) {
-        Ok(l) => l,
+    let (locale, timezone) = match meta_locale_timezone(&config) {
+        Ok(v) => v,
         Err(e) => return bad_request(&e),
     };
     let stripped = strip_meta_keys(&config);
@@ -289,7 +289,7 @@ pub async fn api_push(
     let timeout = state.timeout;
 
     let render_join = tokio::task::spawn_blocking(move || {
-        render_config(&path, &stripped, width, height, is_2x, OutputFormat::WebP, max_duration, locale)
+        render_config(&path, &stripped, width, height, is_2x, OutputFormat::WebP, max_duration, locale, timezone)
     });
     let bytes = match tokio::time::timeout(timeout, render_join).await {
         Ok(Ok(Ok(b))) => b,
@@ -396,8 +396,8 @@ async fn preview_image_response(
     maybe_save_config(&state, &config);
 
     let (scale_is_2x, _) = meta_scale(&config);
-    let locale = match meta_locale(&config) {
-        Ok(l) => l,
+    let (locale, timezone) = match meta_locale_timezone(&config) {
+        Ok(v) => v,
         Err(e) => return bad_request(&e),
     };
     let stripped = strip_meta_keys(&config);
@@ -410,7 +410,7 @@ async fn preview_image_response(
     let timeout = state.timeout;
 
     let join = tokio::task::spawn_blocking(move || {
-        render_config(&path, &stripped, width, height, is_2x, format, max_duration, locale)
+        render_config(&path, &stripped, width, height, is_2x, format, max_duration, locale, timezone)
     });
 
     let result: std::result::Result<Vec<u8>, (StatusCode, anyhow::Error)> =
@@ -471,33 +471,37 @@ fn strip_meta_keys(config: &HashMap<String, String>) -> HashMap<String, String> 
         .collect()
 }
 
-/// Pull the preview locale/timezone out of the raw config (the meta keys the UI
-/// carries through the form) before `strip_meta_keys` removes them. The locale
-/// is validated with the same `validate_locale` the `render` command uses and
-/// returned so it can reach `RenderBytesOptions.locale` (parity with
-/// `render --locale`: both carry it; full locale-aware formatting is a separate
-/// effort). A `_metaTimezone` override is surfaced on stderr rather than
-/// silently dropped: rustlet's `time.now()` has no per-run timezone hook yet, so
-/// applying it needs a runtime feature (a follow-up; see plans/016).
-fn meta_locale(config: &HashMap<String, String>) -> Result<Option<String>> {
-    if let Some(tz) = config
-        .get(META_TIMEZONE)
-        .map(String::as_str)
-        .filter(|s| !s.is_empty())
-    {
-        eprintln!(
-            "preview timezone override `{tz}` is not yet applied: rustlet's time.now() \
-             uses the system zone (runtime timezone support is a follow-up)"
-        );
-    }
-    match config
+/// Pull the preview locale and timezone out of the raw config (the meta keys the
+/// UI carries through the form) before `strip_meta_keys` removes them. Both are
+/// validated and returned so they reach `RenderBytesOptions`: the locale with the
+/// same `validate_locale` the `render` command uses, and the timezone against the
+/// runtime's IANA/offset database. The timezone becomes the run's default zone
+/// for `time.now()`/`time.tz()`, matching pixlet's `applyLocaleTimezone`.
+fn meta_locale_timezone(
+    config: &HashMap<String, String>,
+) -> Result<(Option<String>, Option<String>)> {
+    let locale = match config
         .get(META_LOCALE)
         .map(String::as_str)
         .filter(|s| !s.is_empty())
     {
-        Some(tag) => Ok(Some(crate::util::validate_locale(tag)?)),
-        None => Ok(None),
-    }
+        Some(tag) => Some(crate::util::validate_locale(tag)?),
+        None => None,
+    };
+    let timezone = match config
+        .get(META_TIMEZONE)
+        .map(String::as_str)
+        .filter(|s| !s.is_empty())
+    {
+        Some(tz) => {
+            if !rustlet_runtime::starlark_time::is_known_timezone(tz) {
+                return Err(anyhow!("invalid preview timezone `{tz}`"));
+            }
+            Some(tz.to_string())
+        }
+        None => None,
+    };
+    Ok((locale, timezone))
 }
 
 /// Extract `_renderScale` and return `(is_2x, raw_value)`. Invalid values
@@ -552,6 +556,7 @@ fn render_config(
     format: OutputFormat,
     max_duration: Option<std::time::Duration>,
     locale: Option<String>,
+    timezone: Option<String>,
 ) -> Result<Vec<u8>> {
     let opts = RenderBytesOptions {
         width,
@@ -561,6 +566,7 @@ fn render_config(
         silent: false,
         max_duration,
         locale,
+        timezone,
         ..Default::default()
     };
     render_bytes(path, config, &opts)
@@ -591,29 +597,32 @@ mod tests {
     }
 
     #[test]
-    fn meta_locale_extracts_and_validates() {
-        // Present + valid -> Some(tag). (The timezone is surfaced on stderr, not
-        // returned; it is intentionally not applied yet.)
-        assert_eq!(
-            meta_locale(&preview_config()).unwrap(),
-            Some("en-US".to_string())
-        );
+    fn meta_locale_timezone_extracts_and_validates() {
+        // Present + valid -> Some for both (preview_config uses a real IANA zone).
+        let (locale, timezone) = meta_locale_timezone(&preview_config()).unwrap();
+        assert_eq!(locale, Some("en-US".to_string()));
+        assert_eq!(timezone, Some("America/New_York".to_string()));
 
-        // Absent -> None.
+        // Absent -> None for both.
         let mut bare = HashMap::new();
         bare.insert("city".to_string(), "Oslo".to_string());
-        assert_eq!(meta_locale(&bare).unwrap(), None);
+        assert_eq!(meta_locale_timezone(&bare).unwrap(), (None, None));
 
-        // Empty value is treated as absent.
+        // Empty values are treated as absent.
         let mut empty = HashMap::new();
         empty.insert(META_LOCALE.to_string(), String::new());
-        assert_eq!(meta_locale(&empty).unwrap(), None);
+        empty.insert(META_TIMEZONE.to_string(), String::new());
+        assert_eq!(meta_locale_timezone(&empty).unwrap(), (None, None));
     }
 
     #[test]
-    fn meta_locale_rejects_invalid_tag() {
-        let mut cfg = HashMap::new();
-        cfg.insert(META_LOCALE.to_string(), "en US".to_string());
-        assert!(meta_locale(&cfg).is_err());
+    fn meta_locale_timezone_rejects_invalid_values() {
+        let mut bad_locale = HashMap::new();
+        bad_locale.insert(META_LOCALE.to_string(), "en US".to_string());
+        assert!(meta_locale_timezone(&bad_locale).is_err());
+
+        let mut bad_tz = HashMap::new();
+        bad_tz.insert(META_TIMEZONE.to_string(), "Mars/Phobos".to_string());
+        assert!(meta_locale_timezone(&bad_tz).is_err());
     }
 }

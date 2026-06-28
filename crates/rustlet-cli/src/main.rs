@@ -145,6 +145,12 @@ enum Commands {
         #[arg(long)]
         locale: Option<String>,
 
+        /// Default timezone for `time.now()`/`time.tz()`. Accepts an IANA name
+        /// (e.g. America/New_York) or a fixed offset (e.g. +02:00). Matches
+        /// pixlet's preview timezone control.
+        #[arg(long)]
+        timezone: Option<String>,
+
         /// Directory containing Twemoji SVG files (named by codepoint, e.g. 1f600.svg)
         #[arg(long)]
         twemoji_dir: Option<PathBuf>,
@@ -608,6 +614,7 @@ fn run() -> Result<ExitCode> {
             timeout,
             webp_level,
             locale,
+            timezone,
             twemoji_dir,
         } => {
             if let Some(ref dir) = twemoji_dir {
@@ -620,6 +627,12 @@ fn run() -> Result<ExitCode> {
 
             if let Some(ref tag) = locale {
                 validate_locale(tag)?;
+            }
+
+            if let Some(ref tz) = timezone {
+                if !rustlet_runtime::starlark_time::is_known_timezone(tz) {
+                    bail!("unknown timezone: {tz}");
+                }
             }
 
             let loaded = load_applet(&file)?;
@@ -654,6 +667,7 @@ fn run() -> Result<ExitCode> {
             // Move everything into the timeout worker; the starlark Evaluator is
             // not Send but the closure owns all the inputs so it compiles.
             let runtime_locale = locale.clone();
+            let runtime_timezone = timezone.clone();
             let id = loaded.id.clone();
             let source = loaded.source.clone();
             let base_dir = loaded.base_dir.clone();
@@ -668,6 +682,7 @@ fn run() -> Result<ExitCode> {
                     secret_decryption_key: None,
                     silent,
                     locale: runtime_locale,
+                    timezone: runtime_timezone,
                 };
                 applet.run_with_runtime_options(&id, &source, &config_for_run, opts)
             })?;

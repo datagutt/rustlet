@@ -58,6 +58,11 @@ pub struct AppletRunOptions<'a> {
     /// yet threaded into locale-aware modules. Parity placeholder for pixlet's
     /// `--locale` flag.
     pub locale: Option<String>,
+    /// Optional default timezone (IANA name like `America/New_York` or a fixed
+    /// offset like `+02:00`) applied to `time.now()`/`time.tz()`. `None` keeps
+    /// `now()` in UTC. Set by the serve preview's `_metaTimezone` and
+    /// `render --timezone`, mirroring pixlet's per-thread location.
+    pub timezone: Option<String>,
 }
 
 impl<'a> AppletRunOptions<'a> {
@@ -70,6 +75,7 @@ impl<'a> AppletRunOptions<'a> {
             secret_decryption_key: None,
             silent: false,
             locale: None,
+            timezone: None,
         }
     }
 }
@@ -119,6 +125,7 @@ impl Applet {
                 secret_decryption_key: None,
                 silent: false,
                 locale: None,
+                timezone: None,
             },
         )
     }
@@ -133,6 +140,7 @@ impl Applet {
         seed_for_execution(id);
         set_request_context(id);
         set_render_context(options.is_2x);
+        crate::time_module::set_default_timezone(options.timezone.as_deref());
         set_secret_decrypter(None);
         if let Some(secret_key) = options.secret_decryption_key {
             set_secret_decrypter(Some(secret_key.decrypter_for_app(id)?));
@@ -192,6 +200,7 @@ impl Applet {
         seed_for_execution(id);
         set_request_context(id);
         set_render_context(options.is_2x);
+        crate::time_module::set_default_timezone(options.timezone.as_deref());
         set_secret_decrypter(None);
 
         let registry = BuiltinModuleRegistry::new(options.width, options.height, options.is_2x)?;
@@ -252,6 +261,7 @@ impl Applet {
         seed_for_execution(id);
         set_request_context(id);
         set_render_context(false);
+        crate::time_module::set_default_timezone(None);
         set_secret_decrypter(None);
 
         let registry = BuiltinModuleRegistry::new(64, 32, false)?;
@@ -359,6 +369,7 @@ impl Applet {
         seed_for_execution(id);
         set_request_context(id);
         set_render_context(false);
+        crate::time_module::set_default_timezone(None);
         set_secret_decrypter(None);
 
         let registry = BuiltinModuleRegistry::new(64, 32, false)?;
@@ -389,6 +400,7 @@ impl Applet {
         seed_for_execution(id);
         set_request_context(id);
         set_render_context(false);
+        crate::time_module::set_default_timezone(None);
         set_secret_decrypter(None);
 
         let registry = BuiltinModuleRegistry::new(64, 32, false)?;
@@ -709,6 +721,58 @@ mod tests {
         );
         let config = HashMap::new();
         let roots = applet.run("test.star", src, &config, 64, 32).unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn default_timezone_applies_to_time_now_and_tz() {
+        // A fixed offset is DST-free, so the asserted offset is deterministic
+        // regardless of the wall-clock date the test runs on.
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"time.star\", \"time\")\n",
+            "load(\"render.star\", \"render\")\n",
+            "\n",
+            "def main(config):\n",
+            "    if time.tz() != \"+05:00\":\n",
+            "        fail(\"tz override broken: \" + time.tz())\n",
+            "    if time.now().format(\"-0700\") != \"+0500\":\n",
+            "        fail(\"now() offset broken: \" + time.now().format(\"-0700\"))\n",
+            "    return render.Root(child = render.Box(width = 1, height = 1))\n",
+        );
+        let opts = AppletRunOptions {
+            width: 64,
+            height: 32,
+            is_2x: false,
+            base_dir: None,
+            secret_decryption_key: None,
+            silent: true,
+            locale: None,
+            timezone: Some("+05:00".to_string()),
+        };
+        let roots = applet
+            .run_with_runtime_options("tz.star", src, &HashMap::new(), opts)
+            .unwrap();
+        assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn no_timezone_override_keeps_now_in_utc() {
+        // Without an override, `now()` stays UTC (offset 0), preserving the
+        // historical default and compat-harness behavior.
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"time.star\", \"time\")\n",
+            "load(\"render.star\", \"render\")\n",
+            "\n",
+            "def main(config):\n",
+            "    if time.now().format(\"-0700\") != \"+0000\":\n",
+            "        fail(\"now() should be UTC: \" + time.now().format(\"-0700\"))\n",
+            "    return render.Root(child = render.Box(width = 1, height = 1))\n",
+        );
+        let roots = applet
+            .run("utc.star", src, &HashMap::new(), 64, 32)
+            .unwrap();
         assert_eq!(roots.len(), 1);
     }
 
@@ -1973,6 +2037,7 @@ def main(config):
                     secret_decryption_key: Some(&decryption_key),
                     silent: true,
                     locale: None,
+                    timezone: None,
                 },
             )
             .unwrap();

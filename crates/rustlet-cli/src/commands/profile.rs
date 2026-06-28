@@ -74,6 +74,7 @@ pub fn run(args: Args) -> Result<()> {
             secret_decryption_key: None,
             silent,
             locale,
+            timezone: None,
         };
         applet.profile(&id, &source, &config, opts, &mode)
     })?;

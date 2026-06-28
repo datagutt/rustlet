@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+
 use starlark::environment::GlobalsBuilder;
 use starlark::eval::Evaluator;
 use starlark::values::Value;
@@ -5,10 +7,37 @@ use starlark::values::Value;
 use crate::starlark_duration::StarlarkDuration;
 use crate::starlark_time::{datetime_to_unix, parse_iso8601, StarlarkTime};
 
+thread_local! {
+    /// Optional default timezone applied to `time.now()` and `time.tz()` for the
+    /// current run. Mirrors pixlet's per-thread timezone (`threadTimezoneKey`,
+    /// set by the serve preview's `_metaTimezone` and `render --timezone`).
+    /// `None` keeps the historical behavior: `now()` is UTC and `tz()` reports
+    /// the host system zone.
+    static DEFAULT_TIMEZONE: RefCell<Option<String>> = const { RefCell::new(None) };
+}
+
+/// Set (or clear, with `None`/empty) the default timezone for `time.now()` and
+/// `time.tz()` on this thread. Called once per run from the applet runtime.
+pub fn set_default_timezone(tz: Option<&str>) {
+    DEFAULT_TIMEZONE.with(|cell| {
+        *cell.borrow_mut() = tz.filter(|s| !s.is_empty()).map(str::to_string);
+    });
+}
+
+fn default_timezone() -> Option<String> {
+    DEFAULT_TIMEZONE.with(|cell| cell.borrow().clone())
+}
+
 #[starlark::starlark_module]
 pub fn time_module(builder: &mut GlobalsBuilder) {
     fn now<'v>(eval: &mut Evaluator<'v, '_, '_>) -> anyhow::Result<Value<'v>> {
-        Ok(eval.heap().alloc(StarlarkTime::now()))
+        // pixlet's `time.now()` returns the current time in the run's default
+        // location; with no override we keep `now()` in UTC.
+        let t = match default_timezone() {
+            Some(tz) => StarlarkTime::now().with_location(&tz)?,
+            None => StarlarkTime::now(),
+        };
+        Ok(eval.heap().alloc(t))
     }
 
     fn parse_time<'v>(
@@ -57,7 +86,9 @@ pub fn time_module(builder: &mut GlobalsBuilder) {
     }
 
     fn tz() -> anyhow::Result<String> {
-        Ok(detect_system_timezone())
+        // Report the run's default timezone when one is set (pixlet's
+        // GetLocation), otherwise fall back to the host system zone.
+        Ok(default_timezone().unwrap_or_else(detect_system_timezone))
     }
 
     fn is_valid_timezone(name: &str) -> anyhow::Result<bool> {

@@ -155,6 +155,10 @@ your `$PATH`. Unlike pixlet, rustlet does not embed it.
                            red-shift, warm, sunset, sepia, vintage, dusk, cool,
                            bw, ice, moonlight, neon, pastel)
 --magnify <MAGNIFY>        Integer magnification factor [default: 1]
+--timezone <TIMEZONE>      Default zone for `time.now()` and `time.tz()`. Accepts
+                           an IANA name (e.g. `America/New_York`) or a fixed
+                           offset (e.g. `+02:00`). The serve preview applies the
+                           same value from its timezone control.
 --2x                       Render at 128x64 with terminus-16 as the default
                            font. Takes effect only when the manifest declares
                            `supports2x: true`; otherwise the applet renders at

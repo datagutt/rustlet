@@ -285,6 +285,10 @@ pub struct RenderBytesOptions {
     pub color_filter: rustlet_encode::Filter,
     pub silent: bool,
     pub locale: Option<String>,
+    /// Optional default timezone (IANA name or fixed offset) applied to
+    /// `time.now()`/`time.tz()`. Carried from `render --timezone` and serve's
+    /// `_metaTimezone`.
+    pub timezone: Option<String>,
     pub format: rustlet_encode::OutputFormat,
     pub max_duration: Option<Duration>,
 }
@@ -299,6 +303,7 @@ impl Default for RenderBytesOptions {
             color_filter: rustlet_encode::Filter::None,
             silent: true,
             locale: None,
+            timezone: None,
             format: rustlet_encode::OutputFormat::WebP,
             max_duration: Some(Duration::from_secs(15)),
         }
@@ -342,6 +347,7 @@ pub fn render_bytes(
         secret_decryption_key: None,
         silent: opts.silent,
         locale: opts.locale.clone(),
+        timezone: opts.timezone.clone(),
     };
     let applet = Applet::new();
     let roots = applet
