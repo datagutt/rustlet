@@ -49,8 +49,7 @@
       "kind": "fixture",
       "path": "fixtures/text_offset.star",
       "output_format": "webp",
-      "policy": "known_diff",
-      "reason": "text offset direction/baseline bug — flip to exact when plan 012 lands"
+      "policy": "exact"
     },
     {
       "id": "text_tomthumb_wrap_fixture",

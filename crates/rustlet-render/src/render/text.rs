@@ -52,6 +52,7 @@ impl Text {
 
     pub fn with_offset(mut self, offset: i32) -> Self {
         self.offset = offset;
+        self.render_text();
         self
     }
 
@@ -107,8 +108,10 @@ impl Text {
 
         // Pixlet paints text from a baseline defined by the font descent, then
         // applies each glyph's BBX offsets. This allows fonts like tom-thumb
-        // and short explicit heights to clip correctly.
-        let baseline = text_h - font.descent;
+        // and short explicit heights to clip correctly. The offset is baked into
+        // the baseline (positive offset moves text up, clipping inside the fixed
+        // image) to match pixlet's text.go:110.
+        let baseline = text_h - font.descent - self.offset;
 
         let mut cursor_x: i32 = 0;
         for segment in segments {
@@ -219,10 +222,8 @@ impl Widget for Text {
         let dst_h = pixmap.height() as i32;
         let dst_pixels = pixmap.pixels_mut();
 
-        let offset_y = self.offset;
-
         for sy in 0..src_h {
-            let dy = bounds.y + sy + offset_y;
+            let dy = bounds.y + sy;
             if dy < 0 || dy >= dst_h {
                 continue;
             }
@@ -320,5 +321,32 @@ mod tests {
         let t = Text::new("😀");
         let (w, _) = emoji_atlas::exact_size("😀").unwrap();
         assert_eq!(t.size(), Some((w, emoji_atlas::max_height())));
+    }
+
+    #[test]
+    fn text_positive_offset_raises_baseline() {
+        // pixlet bakes offset into the baseline: a positive offset moves glyphs
+        // up within the fixed-height image (text.go:110), not down at paint time.
+        let topmost = |offset: i32| -> i32 {
+            let t = Text::new("A").with_height(16).with_offset(offset);
+            let mut pixmap = Pixmap::new(16, 32).unwrap();
+            t.paint(&mut pixmap, Rect::new(0, 0, 16, 32), 0);
+            let w = pixmap.width() as i32;
+            pixmap
+                .pixels()
+                .iter()
+                .enumerate()
+                .filter(|(_, p)| p.alpha() > 0)
+                .map(|(i, _)| i as i32 / w)
+                .min()
+                .expect("text should paint some pixels")
+        };
+        let base = topmost(0);
+        let raised = topmost(4);
+        assert_eq!(
+            base - raised,
+            4,
+            "positive offset should raise text by exactly the offset: base={base} raised={raised}"
+        );
     }
 }
