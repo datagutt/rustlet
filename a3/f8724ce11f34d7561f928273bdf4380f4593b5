@@ -1,0 +1,20 @@
+crates/rustlet-cli/src/commands/check.rs
+  s_e25ef1f8a3595a::t_40e94c70c53ede 237-261
+  s_e25ef1f8a3595a::t_54f36d33f08880 153-159,161,164
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "a3f8724ce11f34d7561f928273bdf4380f4593b5",
+  "prompts": {},
+  "sessions": {
+    "s_e25ef1f8a3595a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f08fddf2-6d0a-40df-8f27-9f2d069f4a52",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "datagutt <datagutt@lekanger.no>"
+    }
+  }
+}
