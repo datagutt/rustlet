@@ -172,7 +172,8 @@ fn resize_nrgba_lanczos2(
     let scale_y = source_h as f64 / target_h as f64;
 
     let (coeffs_x, offsets_x, filter_len_x) = create_weights8(target_w, 4, 1.0, scale_x, lanczos2);
-    let temp = resize_nrgba_horizontal_transposed(src, target_w, &coeffs_x, &offsets_x, filter_len_x);
+    let temp =
+        resize_nrgba_horizontal_transposed(src, target_w, &coeffs_x, &offsets_x, filter_len_x);
 
     let (coeffs_y, offsets_y, filter_len_y) = create_weights8(target_h, 4, 1.0, scale_y, lanczos2);
     let out = resize_rgba_horizontal_transposed(
@@ -187,8 +188,7 @@ fn resize_nrgba_lanczos2(
 
     let size = IntSize::from_wh(target_w as u32, target_h as u32)
         .context("failed to build scaled emoji pixmap size")?;
-    Pixmap::from_vec(out, size)
-        .context("failed to allocate scaled emoji pixmap")
+    Pixmap::from_vec(out, size).context("failed to allocate scaled emoji pixmap")
 }
 
 fn resize_nrgba_horizontal_transposed(

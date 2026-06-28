@@ -31,7 +31,11 @@ pub fn process_keyframes(mut arr: Vec<Keyframe>) -> Vec<Keyframe> {
         return vec![default_from, default_to];
     }
 
-    arr.sort_by(|a, b| a.percentage.partial_cmp(&b.percentage).unwrap_or(std::cmp::Ordering::Equal));
+    arr.sort_by(|a, b| {
+        a.percentage
+            .partial_cmp(&b.percentage)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     if arr[0].percentage != 0.0 {
         let mut prepended = Vec::with_capacity(arr.len() + 1);

@@ -34,15 +34,12 @@ pub fn load_applet(path: &Path) -> Result<LoadedApplet> {
         } else {
             None
         };
-        let id = manifest
-            .as_ref()
-            .map(|m| m.id.clone())
-            .unwrap_or_else(|| {
-                path.file_name()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("app")
-                    .to_string()
-            });
+        let id = manifest.as_ref().map(|m| m.id.clone()).unwrap_or_else(|| {
+            path.file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("app")
+                .to_string()
+        });
         Ok(LoadedApplet {
             id,
             source,
@@ -50,8 +47,8 @@ pub fn load_applet(path: &Path) -> Result<LoadedApplet> {
             manifest,
         })
     } else {
-        let source = std::fs::read_to_string(path)
-            .with_context(|| format!("reading {}", path.display()))?;
+        let source =
+            std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
         let id = path
             .file_stem()
             .and_then(|s| s.to_str())
@@ -134,10 +131,7 @@ pub struct RenderInputs {
 /// so CLI overrides win on collision.
 ///
 /// Mirrors `cmd/render.go:249-290` in the pixlet reference.
-pub fn parse_config_args(
-    args: &[String],
-    config_file: Option<&Path>,
-) -> Result<RenderInputs> {
+pub fn parse_config_args(args: &[String], config_file: Option<&Path>) -> Result<RenderInputs> {
     let mut config = HashMap::new();
 
     if let Some(path) = config_file {
@@ -211,9 +205,7 @@ where
         Err(mpsc::RecvTimeoutError::Timeout) => {
             Err(anyhow!("timed out after {}s", timeout.as_secs_f32()))
         }
-        Err(mpsc::RecvTimeoutError::Disconnected) => {
-            Err(anyhow!("render worker disconnected"))
-        }
+        Err(mpsc::RecvTimeoutError::Disconnected) => Err(anyhow!("render worker disconnected")),
     }
 }
 
@@ -414,10 +406,7 @@ mod tests {
     fn parse_config_args_error_on_missing_equals() {
         let args = ["app.star".to_string(), "no_equals".to_string()];
         let err = parse_config_args(&args, None).unwrap_err();
-        assert!(
-            err.to_string().contains("<key>=<value>"),
-            "got: {err}"
-        );
+        assert!(err.to_string().contains("<key>=<value>"), "got: {err}");
     }
 
     #[test]
@@ -495,7 +484,10 @@ mod tests {
         // 2x only when requested AND supported; never auto-promote, never demote-magnify.
         assert!(resolve_2x(true, true), "requested + supported -> 2x");
         assert!(!resolve_2x(true, false), "requested + unsupported -> 1x");
-        assert!(!resolve_2x(false, true), "not requested + supported -> 1x (no auto-promote)");
+        assert!(
+            !resolve_2x(false, true),
+            "not requested + supported -> 1x (no auto-promote)"
+        );
         assert!(!resolve_2x(false, false), "neither -> 1x");
     }
 
@@ -511,7 +503,10 @@ mod tests {
         let inputs = parse_config_args(&[], Some(&cfg)).unwrap();
         assert_eq!(inputs.config.get("name").map(String::as_str), Some("x"));
         assert_eq!(inputs.config.get("count").map(String::as_str), Some("5"));
-        assert_eq!(inputs.config.get("enabled").map(String::as_str), Some("true"));
+        assert_eq!(
+            inputs.config.get("enabled").map(String::as_str),
+            Some("true")
+        );
         assert_eq!(inputs.config.get("ratio").map(String::as_str), Some("1.5"));
         // null is skipped (not stored as a string).
         assert!(!inputs.config.contains_key("nope"));

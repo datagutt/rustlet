@@ -14,20 +14,20 @@ use starlark::values::Value;
 
 use crate::animation_module::build_animation_globals;
 use crate::applet::SILENT_PRINT_HANDLER;
-use crate::filter_module::build_filter_globals;
-use crate::html_module::build_html_globals;
-use crate::i18n_module::build_i18n_globals;
 use crate::assert_module::build_assert_globals;
 use crate::base64_module::build_base64_globals;
 use crate::bsoup_module::build_bsoup_globals;
 use crate::cache_module::build_cache_globals;
 use crate::color_module::build_color_globals;
 use crate::csv_module::build_csv_globals;
+use crate::filter_module::build_filter_globals;
 use crate::gzip_module::build_gzip_globals;
 use crate::hash_module::build_hash_globals;
 use crate::hmac_module::build_hmac_globals;
+use crate::html_module::build_html_globals;
 use crate::http_module::build_http_globals;
 use crate::humanize_module::build_humanize_globals;
+use crate::i18n_module::build_i18n_globals;
 use crate::json_module::build_json_globals;
 use crate::math_module::build_math_globals;
 use crate::qrcode_module::build_qrcode_globals;
@@ -125,10 +125,7 @@ impl BuiltinModuleRegistry {
             "qrcode.star".to_string(),
             build_simple_frozen_module("qrcode", build_qrcode_globals())?,
         );
-        modules.insert(
-            "schema.star".to_string(),
-            build_schema_frozen_module()?,
-        );
+        modules.insert("schema.star".to_string(), build_schema_frozen_module()?);
         modules.insert(
             "strings.star".to_string(),
             build_simple_frozen_module("strings", build_strings_globals())?,

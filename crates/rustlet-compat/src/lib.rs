@@ -305,7 +305,10 @@ fn run_rustlet_case(
     let applet = Applet::new();
 
     let roots = match applet.run_with_options(
-        entry.file_name().and_then(|s| s.to_str()).unwrap_or("main.star"),
+        entry
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("main.star"),
         &src,
         &case.config,
         case.width,
@@ -353,7 +356,11 @@ fn run_rustlet_case(
     decode_encoded_run(workspace_root, &bytes, case)
 }
 
-fn run_pixlet_case(workspace_root: &Path, crate_root: &Path, case: &CompatCase) -> Result<NormalizedRun> {
+fn run_pixlet_case(
+    workspace_root: &Path,
+    crate_root: &Path,
+    case: &CompatCase,
+) -> Result<NormalizedRun> {
     let pixlet = resolve_pixlet_binary(workspace_root)?;
     let case_path = resolve_case_path(workspace_root, crate_root, case)?;
     let temp = tempdir().context("failed to create temp dir for pixlet output")?;
@@ -413,7 +420,11 @@ fn run_pixlet_case(workspace_root: &Path, crate_root: &Path, case: &CompatCase) 
     decode_encoded_run(workspace_root, &bytes, case)
 }
 
-fn decode_encoded_run(workspace_root: &Path, bytes: &[u8], case: &CompatCase) -> Result<NormalizedRun> {
+fn decode_encoded_run(
+    workspace_root: &Path,
+    bytes: &[u8],
+    case: &CompatCase,
+) -> Result<NormalizedRun> {
     match case.output_format {
         OutputFormat::Gif => decode_gif_run(bytes, case),
         OutputFormat::Webp => decode_webp_run(workspace_root, bytes, case),
@@ -433,7 +444,9 @@ fn decode_gif_run(bytes: &[u8], case: &CompatCase) -> Result<NormalizedRun> {
             let (num, denom) = frame.delay().numer_denom_ms();
             delay_ms = if denom == 0 { 0 } else { num / denom.max(1) };
         }
-        normalized.push(normalize_rgba_image(&DynamicImage::ImageRgba8(frame.into_buffer())));
+        normalized.push(normalize_rgba_image(&DynamicImage::ImageRgba8(
+            frame.into_buffer(),
+        )));
         if let Some(limit) = case.max_frames {
             if normalized.len() >= limit {
                 break;
@@ -449,7 +462,11 @@ fn decode_gif_run(bytes: &[u8], case: &CompatCase) -> Result<NormalizedRun> {
     })
 }
 
-fn decode_webp_run(workspace_root: &Path, bytes: &[u8], case: &CompatCase) -> Result<NormalizedRun> {
+fn decode_webp_run(
+    workspace_root: &Path,
+    bytes: &[u8],
+    case: &CompatCase,
+) -> Result<NormalizedRun> {
     let temp = tempdir().context("failed to create temp dir for webp decode")?;
     let input = temp.path().join("frame.webp");
     fs::write(&input, bytes).context("failed to write temp webp")?;
@@ -490,7 +507,11 @@ fn decode_webp_run(workspace_root: &Path, bytes: &[u8], case: &CompatCase) -> Re
     })
 }
 
-fn compare_runs(case: &CompatCase, rustlet: &NormalizedRun, pixlet: &NormalizedRun) -> Option<ComparisonFailure> {
+fn compare_runs(
+    case: &CompatCase,
+    rustlet: &NormalizedRun,
+    pixlet: &NormalizedRun,
+) -> Option<ComparisonFailure> {
     match (&rustlet.status, &pixlet.status) {
         (RunStatus::Error(lhs), RunStatus::Error(rhs)) => {
             if lhs == rhs || case.policy == ComparisonPolicy::ExpectedFail {
@@ -498,7 +519,10 @@ fn compare_runs(case: &CompatCase, rustlet: &NormalizedRun, pixlet: &NormalizedR
             }
             return Some(ComparisonFailure {
                 kind: FailureKind::RuntimeErrorMismatch,
-                message: format!("{}: both failed differently\nrustlet: {lhs}\npixlet: {rhs}", case.id),
+                message: format!(
+                    "{}: both failed differently\nrustlet: {lhs}\npixlet: {rhs}",
+                    case.id
+                ),
             });
         }
         (RunStatus::Error(lhs), RunStatus::Success) => {
@@ -586,8 +610,11 @@ fn write_artifacts(
         "rustlet": summarize_run(rustlet),
         "pixlet": summarize_run(pixlet),
     });
-    fs::write(dir.join("summary.json"), serde_json::to_vec_pretty(&summary)?)
-        .context("failed to write summary artifact")?;
+    fs::write(
+        dir.join("summary.json"),
+        serde_json::to_vec_pretty(&summary)?,
+    )
+    .context("failed to write summary artifact")?;
 
     if let (Some(lhs), Some(rhs)) = (rustlet.frames.first(), pixlet.frames.first()) {
         write_frame_png(&dir.join("rustlet_frame_0.png"), lhs)?;
@@ -657,14 +684,26 @@ fn hash_bytes(bytes: &[u8]) -> String {
 }
 
 fn effective_width(case: &CompatCase) -> u32 {
-    if case.double { 128 } else { case.width }
+    if case.double {
+        128
+    } else {
+        case.width
+    }
 }
 
 fn effective_height(case: &CompatCase) -> u32 {
-    if case.double { 64 } else { case.height }
+    if case.double {
+        64
+    } else {
+        case.height
+    }
 }
 
-fn resolve_case_path(workspace_root: &Path, crate_root: &Path, case: &CompatCase) -> Result<PathBuf> {
+fn resolve_case_path(
+    workspace_root: &Path,
+    crate_root: &Path,
+    case: &CompatCase,
+) -> Result<PathBuf> {
     let path = Path::new(&case.path);
     let resolved = match case.kind {
         CaseKind::Fixture => crate_root.join("compat_cases").join(path),
@@ -699,7 +738,11 @@ fn build_pixlet_binary(workspace_root: &Path) -> Result<PathBuf> {
     let gomodcache = tools_dir.join("go-mod-cache");
     fs::create_dir_all(&gopath).context("failed to create go-path cache")?;
     fs::create_dir_all(&gomodcache).context("failed to create go-mod-cache")?;
-    let binary = tools_dir.join(if cfg!(windows) { "pixlet.exe" } else { "pixlet" });
+    let binary = tools_dir.join(if cfg!(windows) {
+        "pixlet.exe"
+    } else {
+        "pixlet"
+    });
     if binary.exists() && env::var_os("RUSTLET_COMPAT_BUILD_PIXLET").is_none() {
         return Ok(binary);
     }
@@ -742,7 +785,11 @@ fn build_webp_dump_binary(workspace_root: &Path) -> Result<PathBuf> {
     let gomodcache = tools_dir.join("go-mod-cache");
     fs::create_dir_all(&gopath).context("failed to create go-path cache")?;
     fs::create_dir_all(&gomodcache).context("failed to create go-mod-cache")?;
-    let binary = tools_dir.join(if cfg!(windows) { "webp-dump.exe" } else { "webp-dump" });
+    let binary = tools_dir.join(if cfg!(windows) {
+        "webp-dump.exe"
+    } else {
+        "webp-dump"
+    });
     if binary.exists() && env::var_os("RUSTLET_COMPAT_BUILD_PIXLET").is_none() {
         return Ok(binary);
     }

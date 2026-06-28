@@ -94,7 +94,10 @@ mod tests {
     #[test]
     fn parse_variants() {
         assert!(matches!(Curve::parse("linear"), Some(Curve::Linear)));
-        assert!(matches!(Curve::parse("ease_in_out"), Some(Curve::EaseInOut)));
+        assert!(matches!(
+            Curve::parse("ease_in_out"),
+            Some(Curve::EaseInOut)
+        ));
         assert!(matches!(
             Curve::parse("cubic-bezier(0.1, 0.2, 0.3, 0.4)"),
             Some(Curve::CubicBezier(_, _, _, _))

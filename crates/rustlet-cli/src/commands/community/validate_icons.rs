@@ -49,7 +49,11 @@ pub fn run(path: &Path) -> Result<()> {
     }
 
     if errors.is_empty() {
-        println!("{}: ok ({} icon fields checked)", path.display(), fields.len());
+        println!(
+            "{}: ok ({} icon fields checked)",
+            path.display(),
+            fields.len()
+        );
         Ok(())
     } else {
         for err in &errors {

@@ -36,10 +36,7 @@ fn to_f64(value: Value) -> anyhow::Result<f64> {
     if let Some(f) = value.downcast_ref::<StarlarkFloat>() {
         return Ok(f.0);
     }
-    Err(anyhow::anyhow!(
-        "expected number, got {}",
-        value.get_type()
-    ))
+    Err(anyhow::anyhow!("expected number, got {}", value.get_type()))
 }
 
 fn parse_curve_value(value: Value<'_>) -> anyhow::Result<Curve> {
@@ -156,18 +153,13 @@ fn collect_transforms(value: Value<'_>) -> anyhow::Result<Vec<Transform>> {
     if value.is_none() {
         return Ok(Vec::new());
     }
-    let list = ListRef::from_value(value)
-        .ok_or_else(|| anyhow::anyhow!("transforms must be a list"))?;
+    let list =
+        ListRef::from_value(value).ok_or_else(|| anyhow::anyhow!("transforms must be a list"))?;
     let mut result = Vec::with_capacity(list.len());
     for item in list.iter() {
-        let t = item
-            .downcast_ref::<StarlarkTransform>()
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "expected animation.Transform, got {}",
-                    item.get_type()
-                )
-            })?;
+        let t = item.downcast_ref::<StarlarkTransform>().ok_or_else(|| {
+            anyhow::anyhow!("expected animation.Transform, got {}", item.get_type())
+        })?;
         result.push(t.0);
     }
     Ok(result)
@@ -177,8 +169,8 @@ fn collect_keyframes(value: Value<'_>) -> anyhow::Result<Vec<Keyframe>> {
     if value.is_none() {
         return Ok(Vec::new());
     }
-    let list = ListRef::from_value(value)
-        .ok_or_else(|| anyhow::anyhow!("keyframes must be a list"))?;
+    let list =
+        ListRef::from_value(value).ok_or_else(|| anyhow::anyhow!("keyframes must be a list"))?;
     let mut result = Vec::with_capacity(list.len());
     for item in list.iter() {
         let kf = item.downcast_ref::<StarlarkKeyframe>().ok_or_else(|| {
@@ -341,10 +333,7 @@ pub fn animation_module(builder: &mut GlobalsBuilder) {
             .alloc(StarlarkTransform(Transform::Translate { x, y })))
     }
 
-    fn Rotate<'v>(
-        angle: Value<'v>,
-        eval: &mut Evaluator<'v, '_, '_>,
-    ) -> anyhow::Result<Value<'v>> {
+    fn Rotate<'v>(angle: Value<'v>, eval: &mut Evaluator<'v, '_, '_>) -> anyhow::Result<Value<'v>> {
         let angle = to_f64(angle)?;
         Ok(eval
             .heap()
@@ -368,8 +357,16 @@ pub fn animation_module(builder: &mut GlobalsBuilder) {
         #[starlark(default = NoneType)] y_angle: Value<'v>,
         eval: &mut Evaluator<'v, '_, '_>,
     ) -> anyhow::Result<Value<'v>> {
-        let x_angle = if x_angle.is_none() { 0.0 } else { to_f64(x_angle)? };
-        let y_angle = if y_angle.is_none() { 0.0 } else { to_f64(y_angle)? };
+        let x_angle = if x_angle.is_none() {
+            0.0
+        } else {
+            to_f64(x_angle)?
+        };
+        let y_angle = if y_angle.is_none() {
+            0.0
+        } else {
+            to_f64(y_angle)?
+        };
         Ok(eval
             .heap()
             .alloc(StarlarkTransform(Transform::Shear { x_angle, y_angle })))

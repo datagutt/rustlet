@@ -15,9 +15,7 @@ use allocative::Allocative;
 use scraper::{ElementRef, Html, Selector};
 use starlark::environment::{GlobalsBuilder, Methods, MethodsBuilder, MethodsStatic};
 use starlark::starlark_simple_value;
-use starlark::values::{
-    Heap, NoSerialize, ProvidesStaticType, StarlarkValue, Value, ValueLike,
-};
+use starlark::values::{Heap, NoSerialize, ProvidesStaticType, StarlarkValue, Value, ValueLike};
 use starlark_derive::starlark_value;
 
 /// A path from the document's root to a specific element, encoded as a list of
@@ -317,11 +315,7 @@ fn selection_methods(builder: &mut MethodsBuilder) {
             index
         };
         let paths: Vec<NodePath> = if idx >= 0 {
-            sel.paths
-                .get(idx as usize)
-                .cloned()
-                .into_iter()
-                .collect()
+            sel.paths.get(idx as usize).cloned().into_iter().collect()
         } else {
             Vec::new()
         };
@@ -339,10 +333,7 @@ fn selection_methods(builder: &mut MethodsBuilder) {
         Ok(sel.paths.len() as i32)
     }
 
-    fn is_selector<'v>(
-        #[starlark(this)] this: Value<'v>,
-        selector: &str,
-    ) -> anyhow::Result<bool> {
+    fn is_selector<'v>(#[starlark(this)] this: Value<'v>, selector: &str) -> anyhow::Result<bool> {
         let sel = this
             .downcast_ref::<StarlarkHtmlSelection>()
             .ok_or_else(|| anyhow::anyhow!("expected Selection"))?;

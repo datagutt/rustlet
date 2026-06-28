@@ -108,8 +108,7 @@ pub fn scaffold(dir: &Path, inputs: &Inputs) -> Result<Vec<PathBuf>> {
 
     fs::write(&manifest_path, manifest_body)
         .with_context(|| format!("writing {}", manifest_path.display()))?;
-    fs::write(&star_path, star_body)
-        .with_context(|| format!("writing {}", star_path.display()))?;
+    fs::write(&star_path, star_body).with_context(|| format!("writing {}", star_path.display()))?;
 
     Ok(vec![manifest_path, star_path])
 }
@@ -218,7 +217,9 @@ mod tests {
         // Starlark source lints cleanly (parse + sandbox eval).
         let src = fs::read_to_string(&written[1]).unwrap();
         let applet = Applet::new();
-        let issues = applet.lint_source("test-app", &src, Some(dir.path())).unwrap();
+        let issues = applet
+            .lint_source("test-app", &src, Some(dir.path()))
+            .unwrap();
         assert!(issues.is_empty(), "lint issues: {issues:?}");
     }
 }

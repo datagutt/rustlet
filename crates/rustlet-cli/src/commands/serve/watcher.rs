@@ -35,8 +35,8 @@ fn run(
     reload_tx: tokio::sync::broadcast::Sender<()>,
 ) -> Result<()> {
     let (sync_tx, sync_rx) = std::sync::mpsc::channel::<DebounceEventResult>();
-    let mut debouncer = new_debouncer(DEBOUNCE, None, sync_tx)
-        .context("constructing file watcher")?;
+    let mut debouncer =
+        new_debouncer(DEBOUNCE, None, sync_tx).context("constructing file watcher")?;
 
     let mode = if recursive {
         RecursiveMode::Recursive

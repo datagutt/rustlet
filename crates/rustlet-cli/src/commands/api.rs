@@ -111,7 +111,11 @@ async fn run_inner(args: Args) -> Result<()> {
         .await
         .with_context(|| format!("binding {addr}"))?;
     let bound = listener.local_addr()?;
-    eprintln!("api serving at http://{}:{}/api/render", bound.ip(), bound.port());
+    eprintln!(
+        "api serving at http://{}:{}/api/render",
+        bound.ip(),
+        bound.port()
+    );
 
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
@@ -127,11 +131,7 @@ async fn handle_render(
     let sandboxed = match sandbox_path(&state.root, &req.path) {
         Ok(p) => p,
         Err(e) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                format!("path rejected: {e:#}"),
-            )
-                .into_response()
+            return (StatusCode::BAD_REQUEST, format!("path rejected: {e:#}")).into_response()
         }
     };
 

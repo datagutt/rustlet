@@ -78,10 +78,8 @@ impl Widget for Rotate {
         };
         let cx = src.width() as f32 / 2.0;
         let cy = src.height() as f32 / 2.0;
-        let ts = TsTransform::from_rotate_at(self.angle as f32, cx, cy).post_translate(
-            (bounds.x + cb.x) as f32,
-            (bounds.y + cb.y) as f32,
-        );
+        let ts = TsTransform::from_rotate_at(self.angle as f32, cx, cy)
+            .post_translate((bounds.x + cb.x) as f32, (bounds.y + cb.y) as f32);
         composite_with_transform(dest, &src, ts);
     }
 }

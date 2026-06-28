@@ -10,7 +10,10 @@ use crate::starlark_bytes::StarlarkBytes;
 
 #[starlark::starlark_module]
 pub fn gzip_module(builder: &mut GlobalsBuilder) {
-    fn decompress<'v>(data: Value<'v>, eval: &mut Evaluator<'v, '_, '_>) -> anyhow::Result<Value<'v>> {
+    fn decompress<'v>(
+        data: Value<'v>,
+        eval: &mut Evaluator<'v, '_, '_>,
+    ) -> anyhow::Result<Value<'v>> {
         let input = if let Some(text) = data.unpack_str() {
             text.as_bytes().to_vec()
         } else if let Some(bytes) = data.downcast_ref::<StarlarkBytes>() {

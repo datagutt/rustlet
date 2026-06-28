@@ -302,9 +302,9 @@ impl Applet {
             None => crate::schema_module::RETURN_STRING,
         };
 
-        let handler_val = module.get(handler_name).ok_or_else(|| {
-            anyhow!("script does not define a `{handler_name}` handler function")
-        })?;
+        let handler_val = module
+            .get(handler_name)
+            .ok_or_else(|| anyhow!("script does not define a `{handler_name}` handler function"))?;
 
         let heap = module.heap();
         let config_val = heap.alloc(StarlarkConfig {
@@ -346,12 +346,7 @@ impl Applet {
     /// Full semantic lint pass: parses the source, evaluates it in a sandbox so
     /// load() resolution runs, and verifies the applet defines a `main` callable.
     /// Returns a list of lint messages; an empty list means the file is clean.
-    pub fn lint_source(
-        &self,
-        id: &str,
-        src: &str,
-        base_dir: Option<&Path>,
-    ) -> Result<Vec<String>> {
+    pub fn lint_source(&self, id: &str, src: &str, base_dir: Option<&Path>) -> Result<Vec<String>> {
         let mut issues = Vec::new();
 
         let ast = match AstModule::parse(
@@ -386,9 +381,7 @@ impl Applet {
         }
 
         if module.get("main").is_none() {
-            issues.push(
-                "script does not define a `main(config)` function".to_string(),
-            );
+            issues.push("script does not define a `main(config)` function".to_string());
         }
 
         Ok(issues)
@@ -431,7 +424,12 @@ impl Applet {
 
         let schema = result
             .downcast_ref::<StarlarkSchemaSchema>()
-            .ok_or_else(|| anyhow!("get_schema() must return a Schema, got {}", result.get_type()))?;
+            .ok_or_else(|| {
+                anyhow!(
+                    "get_schema() must return a Schema, got {}",
+                    result.get_type()
+                )
+            })?;
 
         crate::schema_module::validate_schema(schema)?;
 
@@ -2095,7 +2093,9 @@ def main(config):
         );
 
         let applet = Applet::new();
-        let roots = applet.run("test.star", &src, &HashMap::new(), 64, 32).unwrap();
+        let roots = applet
+            .run("test.star", &src, &HashMap::new(), 64, 32)
+            .unwrap();
         assert_eq!(roots.len(), 1);
     }
 
@@ -2116,7 +2116,9 @@ def main(config):
         );
 
         let applet = Applet::new();
-        let roots = applet.run("test.star", src, &HashMap::new(), 64, 32).unwrap();
+        let roots = applet
+            .run("test.star", src, &HashMap::new(), 64, 32)
+            .unwrap();
         assert_eq!(roots.len(), 1);
     }
 
@@ -2139,7 +2141,9 @@ def main(config):
         );
 
         let applet = Applet::new();
-        let roots = applet.run("test.star", src, &HashMap::new(), 64, 32).unwrap();
+        let roots = applet
+            .run("test.star", src, &HashMap::new(), 64, 32)
+            .unwrap();
         assert_eq!(roots.len(), 1);
     }
 
@@ -2154,7 +2158,9 @@ def main(config):
         );
 
         let applet = Applet::new();
-        let roots = applet.run("test.star", src, &HashMap::new(), 64, 32).unwrap();
+        let roots = applet
+            .run("test.star", src, &HashMap::new(), 64, 32)
+            .unwrap();
         assert_eq!(roots.len(), 1);
     }
 
@@ -2170,7 +2176,9 @@ def main(config):
         );
 
         let applet = Applet::new();
-        let roots = applet.run("test.star", src, &HashMap::new(), 64, 32).unwrap();
+        let roots = applet
+            .run("test.star", src, &HashMap::new(), 64, 32)
+            .unwrap();
         assert_eq!(roots.len(), 1);
     }
 
@@ -2188,7 +2196,9 @@ def main(config):
         );
 
         let applet = Applet::new();
-        let roots = applet.run("test.star", src, &HashMap::new(), 64, 32).unwrap();
+        let roots = applet
+            .run("test.star", src, &HashMap::new(), 64, 32)
+            .unwrap();
         assert_eq!(roots.len(), 1);
     }
 
@@ -2206,7 +2216,9 @@ def main(config):
         );
 
         let applet = Applet::new();
-        let roots = applet.run("test.star", src, &HashMap::new(), 64, 32).unwrap();
+        let roots = applet
+            .run("test.star", src, &HashMap::new(), 64, 32)
+            .unwrap();
         assert_eq!(roots.len(), 1);
     }
 
@@ -2231,7 +2243,10 @@ def main(config):
         let out = applet
             .call_schema_handler("main.star", src, None, "search", &config, "abc")
             .unwrap();
-        assert_eq!(out, "[{\"display\":\"abc\",\"text\":\"abc\",\"value\":\"abc\"}]");
+        assert_eq!(
+            out,
+            "[{\"display\":\"abc\",\"text\":\"abc\",\"value\":\"abc\"}]"
+        );
     }
 
     #[test]
@@ -2394,7 +2409,10 @@ def main(config):
             "    return schema.Schema(fields = [schema.Color(id = \"c\", name = \"C\", desc = \"d\", icon = \"i\", default = \"#ABC\")])\n",
         );
         let json = schema_json_for(src).unwrap();
-        assert!(json.contains("\"#abc\""), "expected normalized #abc, got: {json}");
+        assert!(
+            json.contains("\"#abc\""),
+            "expected normalized #abc, got: {json}"
+        );
     }
 
     #[test]

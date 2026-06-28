@@ -7,7 +7,13 @@ use sunrise::{Coordinates, SolarDay, SolarEvent};
 
 use crate::starlark_time::StarlarkTime;
 
-fn sunrise_sunset(lat: f64, lng: f64, year: i32, month: u32, day: u32) -> anyhow::Result<(i64, i64)> {
+fn sunrise_sunset(
+    lat: f64,
+    lng: f64,
+    year: i32,
+    month: u32,
+    day: u32,
+) -> anyhow::Result<(i64, i64)> {
     let coord = Coordinates::new(lat, lng)
         .ok_or_else(|| anyhow::anyhow!("invalid coordinates: ({}, {})", lat, lng))?;
     let date = NaiveDate::from_ymd_opt(year, month, day)

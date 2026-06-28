@@ -28,8 +28,8 @@ pub struct Config {
 }
 
 pub fn config_path() -> Result<PathBuf> {
-    let base = dirs::config_dir()
-        .ok_or_else(|| anyhow!("could not locate user config directory"))?;
+    let base =
+        dirs::config_dir().ok_or_else(|| anyhow!("could not locate user config directory"))?;
     Ok(base.join("rustlet").join("config.yaml"))
 }
 
@@ -38,24 +38,20 @@ pub fn load() -> Result<Config> {
     if !path.exists() {
         return Ok(Config::default());
     }
-    let text = fs::read_to_string(&path)
-        .with_context(|| format!("reading {}", path.display()))?;
+    let text = fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
     if text.trim().is_empty() {
         return Ok(Config::default());
     }
-    serde_yaml::from_str::<Config>(&text)
-        .with_context(|| format!("parsing {}", path.display()))
+    serde_yaml::from_str::<Config>(&text).with_context(|| format!("parsing {}", path.display()))
 }
 
 pub fn save(cfg: &Config) -> Result<()> {
     let path = config_path()?;
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("creating {}", parent.display()))?;
+        fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
     }
     let text = serde_yaml::to_string(cfg)?;
-    fs::write(&path, text.as_bytes())
-        .with_context(|| format!("writing {}", path.display()))?;
+    fs::write(&path, text.as_bytes()).with_context(|| format!("writing {}", path.display()))?;
     restrict_permissions(&path)?;
     Ok(())
 }
@@ -64,8 +60,7 @@ pub fn save(cfg: &Config) -> Result<()> {
 fn restrict_permissions(path: &std::path::Path) -> Result<()> {
     use std::os::unix::fs::PermissionsExt;
     let perms = fs::Permissions::from_mode(0o600);
-    fs::set_permissions(path, perms)
-        .with_context(|| format!("chmod 0600 {}", path.display()))?;
+    fs::set_permissions(path, perms).with_context(|| format!("chmod 0600 {}", path.display()))?;
     Ok(())
 }
 
@@ -182,7 +177,12 @@ mod tests {
         );
         // RUSTLET_* beats the pixlet fallback and the config file.
         assert_eq!(
-            pick_credential(None, Some("rustlet".into()), Some("pixlet".into()), Some("cfg".into())),
+            pick_credential(
+                None,
+                Some("rustlet".into()),
+                Some("pixlet".into()),
+                Some("cfg".into())
+            ),
             Some("rustlet".to_string())
         );
         // PIXLET_* fallback beats the config file.
