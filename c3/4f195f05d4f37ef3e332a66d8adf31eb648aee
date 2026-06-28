@@ -1,0 +1,30 @@
+crates/rustlet-runtime/src/schema_module.rs
+  s_e25ef1f8a3595a::t_04fe144a13c5d4 15-76
+  s_e25ef1f8a3595a::t_e0fe0fcf5eaebe 842,845-860
+  s_e25ef1f8a3595a::t_a2b6d71b985e0a 362-365,367-368
+  s_e25ef1f8a3595a::t_9ca2939b4bbb48 366,369
+crates/rustlet-runtime/src/applet.rs
+  s_e25ef1f8a3595a::t_be4867daaab3fe 237-242
+  s_e25ef1f8a3595a::t_190e10a4f9ebe8 2145-2267
+  s_e25ef1f8a3595a::t_70d8a4bfcde8f9 274-294
+  s_e25ef1f8a3595a::t_0229d2a5bb9afe 305-316,318,321
+crates/rustlet-runtime/src/module_loader.rs
+  s_e25ef1f8a3595a::t_54f056c89e07ef 508-541
+  s_e25ef1f8a3595a::t_357c8b31bc7b49 130
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "c34f195f05d4f37ef3e332a66d8adf31eb648aee",
+  "prompts": {},
+  "sessions": {
+    "s_e25ef1f8a3595a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f08fddf2-6d0a-40df-8f27-9f2d069f4a52",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "datagutt <datagutt@lekanger.no>"
+    }
+  }
+}
