@@ -1,0 +1,23 @@
+crates/rustlet-compat/compat_cases/cases.json
+  s_e25ef1f8a3595a::t_be2323cffc1f97 60
+crates/rustlet-render/src/render/wrapped_text.rs
+  s_e25ef1f8a3595a::t_b310dd0d65b221 278-282,290-292
+  s_e25ef1f8a3595a::t_61d01bc3437436 507-533
+  s_e25ef1f8a3595a::t_12842874014348 207-210
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "85680ab8253bf91556adb42698408a9a2221c7cc",
+  "prompts": {},
+  "sessions": {
+    "s_e25ef1f8a3595a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f08fddf2-6d0a-40df-8f27-9f2d069f4a52",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "datagutt <datagutt@lekanger.no>"
+    }
+  }
+}
