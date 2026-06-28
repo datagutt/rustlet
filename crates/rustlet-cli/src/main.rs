@@ -16,7 +16,7 @@ use commands::community::CommunityAction;
 use commands::config_cmd::ConfigAction;
 use util::{
     collect_star_files, default_output_path, explicit_output, load_applet, parse_config_args,
-    run_with_timeout, validate_locale,
+    resolve_2x, run_with_timeout, validate_locale,
 };
 
 #[derive(Parser)]
@@ -115,9 +115,9 @@ enum Commands {
         #[arg(short = 'm', long, default_value_t = 1)]
         magnify: u32,
 
-        /// Double the canvas size (128x64) and use terminus-16 default font.
-        /// Auto-enabled when the manifest declares `supports2x: true` and the
-        /// applet is loaded from a directory.
+        /// Render at 128x64 (and use the terminus-16 default font). Only takes
+        /// effect when the manifest declares `supports2x: true`; otherwise the
+        /// app renders at 1x (64x32), matching pixlet.
         #[arg(short = '2', long = "2x")]
         double: bool,
 
@@ -593,7 +593,7 @@ fn run() -> Result<ExitCode> {
             height,
             format,
             color_filter,
-            mut magnify,
+            magnify,
             double,
             silent,
             max_duration,
@@ -616,17 +616,12 @@ fn run() -> Result<ExitCode> {
 
             let loaded = load_applet(&file)?;
 
-            // `--2x` on the CLI takes precedence; otherwise auto-enable when the
-            // manifest opts in with `supports2x: true`, matching pixlet. If the
-            // user requested 2x but the manifest doesn't support it, silently
-            // double the magnify instead — mirrors `loader.go:388-391`.
+            // pixlet: 2x only when explicitly requested AND the manifest
+            // declares `supports2x`; otherwise 1x. Never auto-promote from the
+            // manifest, and never double magnify as a fallback (loader.go:391).
             let manifest_supports_2x =
                 loaded.manifest.as_ref().map(|m| m.supports2x).unwrap_or(false);
-            let mut is_2x = double || manifest_supports_2x;
-            if double && !manifest_supports_2x {
-                is_2x = false;
-                magnify = magnify.saturating_mul(2).max(1);
-            }
+            let is_2x = resolve_2x(double, manifest_supports_2x);
             let (render_width, render_height) = if is_2x { (128, 64) } else { (width, height) };
 
             let out_format = match format {

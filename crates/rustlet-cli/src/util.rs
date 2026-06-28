@@ -197,6 +197,14 @@ where
     }
 }
 
+/// Resolve whether to render at 2x. pixlet renders 128x64 only when 2x is
+/// explicitly requested AND the manifest declares `supports2x`; it never
+/// auto-promotes from the manifest. Shared by `render` and `render_bytes` so the
+/// two sites can't drift.
+pub fn resolve_2x(requested: bool, manifest_supports_2x: bool) -> bool {
+    requested && manifest_supports_2x
+}
+
 /// Compute the output path when `--output` was not given. Appends `@2x`
 /// before the extension when `is_2x`, mirroring `cmd/render.go:185-187`.
 pub fn default_output_path(applet_path: &Path, extension: &str, is_2x: bool) -> PathBuf {
@@ -281,8 +289,9 @@ impl Default for RenderBytesOptions {
 /// `check`. Loads the applet at `path`, runs `main(config)`, paints frames,
 /// applies filter + magnify, and encodes to the requested format.
 ///
-/// Honors the same 2x auto-demotion pixlet does: if the caller asked for 2x
-/// but the manifest lacks `supports2x`, magnify doubles instead.
+/// Matches pixlet's 2x behavior: render at 128x64 only when 2x is requested AND
+/// the manifest declares `supports2x`; otherwise render 1x with `magnify`
+/// untouched (no auto-promote, no magnify fallback).
 pub fn render_bytes(
     path: &Path,
     config: &HashMap<String, String>,
@@ -297,12 +306,8 @@ pub fn render_bytes(
         .as_ref()
         .map(|m| m.supports2x)
         .unwrap_or(false);
-    let mut is_2x = opts.is_2x || manifest_supports_2x;
-    let mut magnify = opts.magnify;
-    if opts.is_2x && !manifest_supports_2x {
-        is_2x = false;
-        magnify = magnify.saturating_mul(2).max(1);
-    }
+    let is_2x = resolve_2x(opts.is_2x, manifest_supports_2x);
+    let magnify = opts.magnify;
     let (render_width, render_height) = if is_2x {
         (128, 64)
     } else {
@@ -457,5 +462,14 @@ mod tests {
         })
         .unwrap_err();
         assert!(err.to_string().contains("timed out"));
+    }
+
+    #[test]
+    fn resolve_2x_matches_pixlet() {
+        // 2x only when requested AND supported; never auto-promote, never demote-magnify.
+        assert!(resolve_2x(true, true), "requested + supported -> 2x");
+        assert!(!resolve_2x(true, false), "requested + unsupported -> 1x");
+        assert!(!resolve_2x(false, true), "not requested + supported -> 1x (no auto-promote)");
+        assert!(!resolve_2x(false, false), "neither -> 1x");
     }
 }
