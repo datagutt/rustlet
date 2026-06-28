@@ -29,6 +29,8 @@ struct CachedResponse {
     expires_at: Instant,
 }
 
+const MAX_CACHE_ENTRIES: usize = 256;
+
 static HTTP_CACHE: LazyLock<Mutex<HashMap<u64, CachedResponse>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
@@ -63,12 +65,31 @@ fn get_cached(key: u64) -> Option<CachedResponse> {
     None
 }
 
+/// Bring `cache` below `MAX_CACHE_ENTRIES` before an insert. First drop expired
+/// entries; if still at capacity, evict the soonest-to-expire entries until
+/// there is room. Without this the cache grows without bound when many distinct
+/// long-TTL requests are made in a long-running `serve`/`api` process.
+fn enforce_capacity(cache: &mut HashMap<u64, CachedResponse>) {
+    if cache.len() < MAX_CACHE_ENTRIES {
+        return;
+    }
+    let now = Instant::now();
+    cache.retain(|_, v| v.expires_at > now);
+    while cache.len() >= MAX_CACHE_ENTRIES {
+        let Some(evict) = cache
+            .iter()
+            .min_by_key(|(_, v)| v.expires_at)
+            .map(|(k, _)| *k)
+        else {
+            break;
+        };
+        cache.remove(&evict);
+    }
+}
+
 fn put_cached(key: u64, resp: &CachedResponse) {
     if let Ok(mut cache) = HTTP_CACHE.lock() {
-        if cache.len() > 256 {
-            let now = Instant::now();
-            cache.retain(|_, v| v.expires_at > now);
-        }
+        enforce_capacity(&mut cache);
         cache.insert(
             key,
             CachedResponse {
@@ -571,4 +592,36 @@ pub fn build_http_globals() -> starlark::environment::Globals {
     starlark::environment::GlobalsBuilder::new()
         .with(http_module)
         .build()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    fn resp(expires_at: Instant) -> CachedResponse {
+        CachedResponse {
+            url: String::new(),
+            status_code: 200,
+            status: String::new(),
+            encoding: String::new(),
+            body: String::new(),
+            headers: Vec::new(),
+            expires_at,
+        }
+    }
+
+    #[test]
+    fn enforce_capacity_bounds_size_and_evicts_soonest_expiring() {
+        let mut cache: HashMap<u64, CachedResponse> = HashMap::new();
+        let base = Instant::now();
+        for i in 0..(MAX_CACHE_ENTRIES as u64 + 50) {
+            cache.insert(i, resp(base + Duration::from_secs(1000 + i)));
+        }
+        enforce_capacity(&mut cache);
+        assert!(cache.len() < MAX_CACHE_ENTRIES, "len = {}", cache.len());
+        let last = MAX_CACHE_ENTRIES as u64 + 49;
+        assert!(cache.contains_key(&last));
+        assert!(!cache.contains_key(&0));
+    }
 }
