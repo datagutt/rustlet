@@ -1,0 +1,29 @@
+crates/rustlet-cli/src/util.rs
+  s_e25ef1f8a3595a::t_25aba4e8ca3aed 310
+  s_e25ef1f8a3595a::t_0f22336fc16c89 200-207
+  s_e25ef1f8a3595a::t_85f57b0d6a8491 292-294
+  s_e25ef1f8a3595a::t_86b464d6c9ae19 309
+  s_e25ef1f8a3595a::t_2cbca139cf32d8 466-474
+crates/rustlet-cli/src/main.rs
+  s_e25ef1f8a3595a::t_4437730f2cc625 19
+  s_e25ef1f8a3595a::t_44bdc77f1e8172 596
+  s_e25ef1f8a3595a::t_d2ebf9ee7f32fb 624
+  s_e25ef1f8a3595a::t_703991881ddd28 118-120
+  s_e25ef1f8a3595a::t_3f04ba3c44c12f 619-621
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "1e35e6beed386dfb8521d3b36156348feb9418a7",
+  "prompts": {},
+  "sessions": {
+    "s_e25ef1f8a3595a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f08fddf2-6d0a-40df-8f27-9f2d069f4a52",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "datagutt <datagutt@lekanger.no>"
+    }
+  }
+}
