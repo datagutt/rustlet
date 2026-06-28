@@ -12,6 +12,68 @@ use starlark_derive::starlark_value;
 
 use crate::json_module::starlark_to_serde;
 
+// Handler return types, mirroring pixlet's `HandlerReturnType` iota
+// (.reference/pixlet/schema/schema.go:16-19). Exposed to Starlark as
+// `schema.HandlerType.{Schema,Options,String,Field}`.
+pub const RETURN_SCHEMA: i8 = 0;
+pub const RETURN_OPTIONS: i8 = 1;
+pub const RETURN_STRING: i8 = 2;
+pub const RETURN_FIELD: i8 = 3;
+
+/// Map a handler-bearing field's kind to its handler return type. pixlet derives
+/// this from the field type (`switch schemaField.Type` in schema.go:189-200), so
+/// the field kind is the single source of truth rather than a stored copy.
+pub fn return_type_for_kind(kind: &str) -> i8 {
+    match kind {
+        "typeahead" | "locationbased" => RETURN_OPTIONS,
+        "generated" => RETURN_SCHEMA,
+        "oauth2" | "oauth1" => RETURN_STRING,
+        _ => RETURN_STRING,
+    }
+}
+
+/// Encode a schema handler's Starlark return value into the wire form pixlet's
+/// `CallSchemaHandler` produces for each return type
+/// (.reference/pixlet/runtime/applet.go:361-413).
+pub fn encode_handler_result(return_type: i8, value: Value<'_>) -> anyhow::Result<String> {
+    match return_type {
+        RETURN_OPTIONS => {
+            // A list of `schema.Option(...)` values -> [{display, text, value}].
+            let opts = collect_options(value)?.unwrap_or_default();
+            let arr: Vec<JsonValue> = opts
+                .iter()
+                .map(|o| {
+                    json!({
+                        "display": o.text,
+                        "text": o.text,
+                        "value": o.value,
+                    })
+                })
+                .collect();
+            Ok(serde_json::to_string(&JsonValue::Array(arr))?)
+        }
+        RETURN_SCHEMA => {
+            let schema = value.downcast_ref::<StarlarkSchemaSchema>().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "generated handler must return a schema.Schema, got {}",
+                    value.get_type()
+                )
+            })?;
+            Ok(serde_json::to_string(&schema.to_json())?)
+        }
+        // pixlet's AsString: return the raw string body, not a JSON-quoted value.
+        RETURN_STRING => Ok(value
+            .unpack_str()
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| value.to_str())),
+        // ReturnField / unknown: best-effort via the generic starlark->json bridge.
+        _ => {
+            let as_json = starlark_to_serde(value)?;
+            Ok(serde_json::to_string(&as_json)?)
+        }
+    }
+}
+
 // Custom Starlark schema values that serialize to Pixlet-compatible JSON.
 //
 // Each schema constructor returns a `StarlarkSchemaField`. `Schema(...)` returns a
@@ -297,8 +359,14 @@ fn handler_function_name(value: Value<'_>) -> Option<String> {
     if let Some(s) = value.unpack_str() {
         return Some(s.to_string());
     }
-    // Starlark Function has no stable name API in the bindings we expose;
-    // fall back to the type display.
+    // A `def` value's signature is its module-qualified name in this starlark
+    // version (e.g. "app.search"). We want the bare function name: it matches
+    // pixlet's handler key and the module global used to re-resolve the handler
+    // via `module.get(name)`.
+    if let Some(spec) = value.parameters_spec() {
+        let sig = spec.signature();
+        return Some(sig.rsplit('.').next().unwrap_or(&sig).to_string());
+    }
     Some(value.to_str())
 }
 
@@ -771,11 +839,25 @@ pub fn schema_module(builder: &mut GlobalsBuilder) {
 
     fn Handler<'v>(
         function: Value<'v>,
-        #[starlark(default = "")] _handler_type: &str,
+        #[starlark(default = NoneType)] handler_type: Value<'v>,
         _eval: &mut Evaluator<'v, '_, '_>,
     ) -> anyhow::Result<Value<'v>> {
-        // Pixlet wraps function references in a Handler value. We pass the function through
-        // so callers can identify it later if needed; handler type is validated by field.
+        // pixlet's schema.Handler pairs a function with an explicit return type
+        // (schema.HandlerType.*). We validate the type is a known int so apps
+        // using this form load, but return the bare function: the field
+        // constructor that consumes it derives the return type from its field
+        // kind (mirrors pixlet's switch on Type).
+        if let Some(t) = handler_type.unpack_i32() {
+            if !(0..=3).contains(&t) {
+                return Err(anyhow::anyhow!(
+                    "invalid schema.Handler type {t}; expected 0..=3 (schema.HandlerType.*)"
+                ));
+            }
+        } else if !handler_type.is_none() && handler_type.unpack_str().is_none() {
+            return Err(anyhow::anyhow!(
+                "schema.Handler type must be an int (schema.HandlerType.*)"
+            ));
+        }
         Ok(function)
     }
 

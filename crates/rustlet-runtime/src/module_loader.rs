@@ -127,7 +127,7 @@ impl BuiltinModuleRegistry {
         );
         modules.insert(
             "schema.star".to_string(),
-            build_simple_frozen_module("schema", build_schema_globals())?,
+            build_schema_frozen_module()?,
         );
         modules.insert(
             "strings.star".to_string(),
@@ -503,6 +503,40 @@ fn build_simple_frozen_module(
     module
         .freeze()
         .map_err(|e| anyhow!("failed to freeze {name} module: {e:?}"))
+}
+
+fn build_schema_frozen_module() -> Result<FrozenModule> {
+    use crate::schema_module::{RETURN_FIELD, RETURN_OPTIONS, RETURN_SCHEMA, RETURN_STRING};
+
+    let schema_globals = build_schema_globals();
+
+    let module = Module::new();
+    let heap = module.heap();
+
+    let mut entries: Vec<(&str, starlark::values::Value)> = schema_globals
+        .iter()
+        .map(|(name, val)| (name, val.to_value()))
+        .collect();
+
+    // schema.HandlerType.{Schema,Options,String,Field} = 0,1,2,3, mirroring
+    // pixlet schema/module.go:24-30. Allocated on the module heap (not the
+    // globals heap) so the nested struct survives freezing alongside `schema`.
+    entries.push((
+        "HandlerType",
+        heap.alloc(AllocStruct([
+            ("Schema", RETURN_SCHEMA as i32),
+            ("Options", RETURN_OPTIONS as i32),
+            ("String", RETURN_STRING as i32),
+            ("Field", RETURN_FIELD as i32),
+        ])),
+    ));
+
+    let struct_val = heap.alloc(AllocStruct(entries));
+    module.set("schema", struct_val);
+
+    module
+        .freeze()
+        .map_err(|e| anyhow!("failed to freeze schema module: {e:?}"))
 }
 
 fn build_time_frozen_module() -> Result<FrozenModule> {

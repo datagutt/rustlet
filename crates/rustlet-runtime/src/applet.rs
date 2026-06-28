@@ -234,12 +234,12 @@ impl Applet {
 
     /// Invoke a named starlark handler function defined in an applet module.
     ///
-    /// Used by serve's schema form to power `typeahead`, `locationbased`, and
-    /// `generated` schema field types. The handler is looked up in the
-    /// module's globals by name and called with `(config, param)`. The return
-    /// value is serialized to JSON via the existing starlark-to-serde bridge.
-    ///
-    /// Mirrors pixlet's `applet.CallSchemaHandler`.
+    /// Used by serve's schema form to power `typeahead`, `locationbased`,
+    /// `oauth2`, and `generated` schema field types. The handler is looked up in
+    /// the module's globals by name and called with `(param)`, appending the
+    /// config only when the handler declares more than one parameter. The return
+    /// value is encoded by the field's return type (options/schema/string),
+    /// mirroring pixlet's `applet.CallSchemaHandler`.
     pub fn call_schema_handler(
         &self,
         id: &str,
@@ -271,6 +271,27 @@ impl Applet {
         eval.eval_module(ast, &self.globals)
             .map_err(|e| anyhow!("{e}"))?;
 
+        // Resolve the handler's return type from the schema first. pixlet
+        // derives it from the field type that owns the handler
+        // (typeahead/locationbased -> options, generated -> schema, oauth2 ->
+        // string). This evaluates `get_schema()`, which may run GC, so it must
+        // happen before we hold any module values we re-use below.
+        let return_type = match module.get("get_schema") {
+            Some(gs) => eval
+                .eval_function(gs, &[], &[])
+                .map_err(|e| anyhow!("{e}"))?
+                .downcast_ref::<StarlarkSchemaSchema>()
+                .and_then(|schema| {
+                    schema
+                        .fields
+                        .iter()
+                        .find(|f| f.handler_name.as_deref() == Some(handler_name))
+                        .map(|f| crate::schema_module::return_type_for_kind(&f.kind))
+                })
+                .unwrap_or(crate::schema_module::RETURN_STRING),
+            None => crate::schema_module::RETURN_STRING,
+        };
+
         let handler_val = module.get(handler_name).ok_or_else(|| {
             anyhow!("script does not define a `{handler_name}` handler function")
         })?;
@@ -281,12 +302,23 @@ impl Applet {
         });
         let param_val = heap.alloc(param);
 
+        // pixlet calls handler(param) and appends config only when the handler
+        // declares more than one parameter.
+        let nparams = handler_val
+            .parameters_spec()
+            .map(|spec| spec.len())
+            .unwrap_or(1);
+        let args = if nparams > 1 {
+            vec![param_val, config_val]
+        } else {
+            vec![param_val]
+        };
+
         let result = eval
-            .eval_function(handler_val, &[config_val, param_val], &[])
+            .eval_function(handler_val, &args, &[])
             .map_err(|e| anyhow!("{e}"))?;
 
-        let as_json = crate::json_module::starlark_to_serde(result)?;
-        Ok(serde_json::to_string(&as_json)?)
+        crate::schema_module::encode_handler_result(return_type, result)
     }
 
     /// Parse a `.star` source file and return any syntax errors without executing
@@ -2109,5 +2141,128 @@ def main(config):
         let applet = Applet::new();
         let roots = applet.run("test.star", src, &HashMap::new(), 64, 32).unwrap();
         assert_eq!(roots.len(), 1);
+    }
+
+    #[test]
+    fn schema_typeahead_handler_returns_options() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"schema.star\", \"schema\")\n",
+            "\n",
+            "def search(pattern):\n",
+            "    return [schema.Option(display = pattern, value = pattern)]\n",
+            "\n",
+            "def get_schema():\n",
+            "    return schema.Schema(\n",
+            "        version = \"1\",\n",
+            "        fields = [\n",
+            "            schema.Typeahead(id = \"item\", name = \"Item\", desc = \"d\", icon = \"gear\", handler = search),\n",
+            "        ],\n",
+            "    )\n",
+        );
+        let config = HashMap::new();
+        let out = applet
+            .call_schema_handler("main.star", src, None, "search", &config, "abc")
+            .unwrap();
+        assert_eq!(out, "[{\"display\":\"abc\",\"text\":\"abc\",\"value\":\"abc\"}]");
+    }
+
+    #[test]
+    fn schema_handler_arity_controls_config_arg() {
+        let applet = Applet::new();
+        // Single-param handler is called with just (param); passing config too
+        // would be "too many positional args".
+        let one = concat!(
+            "load(\"schema.star\", \"schema\")\n",
+            "\n",
+            "def opts(pattern):\n",
+            "    return [schema.Option(display = pattern, value = pattern)]\n",
+            "\n",
+            "def get_schema():\n",
+            "    return schema.Schema(fields = [schema.Typeahead(id = \"i\", name = \"n\", desc = \"d\", icon = \"x\", handler = opts)])\n",
+        );
+        let config = HashMap::new();
+        let out = applet
+            .call_schema_handler("m.star", one, None, "opts", &config, "q")
+            .unwrap();
+        assert!(out.contains("\"value\":\"q\""), "got: {out}");
+
+        // Two-param handler receives config as the second arg.
+        let two = concat!(
+            "load(\"schema.star\", \"schema\")\n",
+            "\n",
+            "def opts2(pattern, config):\n",
+            "    return [schema.Option(display = config.get(\"k\"), value = pattern)]\n",
+            "\n",
+            "def get_schema():\n",
+            "    return schema.Schema(fields = [schema.Typeahead(id = \"i\", name = \"n\", desc = \"d\", icon = \"x\", handler = opts2)])\n",
+        );
+        let mut cfg = HashMap::new();
+        cfg.insert("k".to_string(), "v".to_string());
+        let out2 = applet
+            .call_schema_handler("m.star", two, None, "opts2", &cfg, "q")
+            .unwrap();
+        assert!(out2.contains("\"display\":\"v\""), "got: {out2}");
+        assert!(out2.contains("\"value\":\"q\""), "got: {out2}");
+    }
+
+    #[test]
+    fn schema_generated_handler_returns_schema() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"schema.star\", \"schema\")\n",
+            "\n",
+            "def gen(value):\n",
+            "    return schema.Schema(version = \"1\", fields = [schema.Text(id = \"a\", name = \"A\", desc = \"d\", icon = \"i\", default = \"x\")])\n",
+            "\n",
+            "def get_schema():\n",
+            "    return schema.Schema(fields = [schema.Generated(id = \"g\", source = \"src\", handler = gen)])\n",
+        );
+        let config = HashMap::new();
+        let out = applet
+            .call_schema_handler("m.star", src, None, "gen", &config, "")
+            .unwrap();
+        assert!(out.contains("\"version\":\"1\""), "got: {out}");
+        assert!(out.contains("\"type\":\"text\""), "got: {out}");
+    }
+
+    #[test]
+    fn schema_oauth2_handler_returns_raw_string() {
+        let applet = Applet::new();
+        let src = concat!(
+            "load(\"schema.star\", \"schema\")\n",
+            "\n",
+            "def auth(value):\n",
+            "    return \"token-\" + value\n",
+            "\n",
+            "def get_schema():\n",
+            "    return schema.Schema(fields = [schema.OAuth2(id = \"o\", name = \"n\", desc = \"d\", icon = \"i\", handler = auth, client_id = \"c\", authorization_endpoint = \"https://e\")])\n",
+        );
+        let config = HashMap::new();
+        let out = applet
+            .call_schema_handler("m.star", src, None, "auth", &config, "abc")
+            .unwrap();
+        assert_eq!(out, "token-abc");
+    }
+
+    #[test]
+    fn schema_handler_type_constants() {
+        let applet = Applet::new();
+        // Exercise schema.HandlerType.{Schema,Options,String,Field} (= 0,1,2,3)
+        // through an oauth2 (string-return) handler.
+        let src = concat!(
+            "load(\"schema.star\", \"schema\")\n",
+            "\n",
+            "def ht(value):\n",
+            "    return str(schema.HandlerType.Schema) + str(schema.HandlerType.Options) + str(schema.HandlerType.String) + str(schema.HandlerType.Field)\n",
+            "\n",
+            "def get_schema():\n",
+            "    return schema.Schema(fields = [schema.OAuth2(id = \"o\", name = \"n\", desc = \"d\", icon = \"i\", handler = ht, client_id = \"c\", authorization_endpoint = \"https://e\")])\n",
+        );
+        let config = HashMap::new();
+        let out = applet
+            .call_schema_handler("m.star", src, None, "ht", &config, "")
+            .unwrap();
+        assert_eq!(out, "0123");
     }
 }
