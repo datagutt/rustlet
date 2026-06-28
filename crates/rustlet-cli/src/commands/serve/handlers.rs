@@ -72,10 +72,7 @@ pub async fn preview_legacy(State(state): State<SharedState>) -> Response {
 
 // ----- /api/v1/preview.webp and .gif -----
 
-pub async fn api_preview_webp(
-    State(state): State<SharedState>,
-    multipart: Multipart,
-) -> Response {
+pub async fn api_preview_webp(State(state): State<SharedState>, multipart: Multipart) -> Response {
     let config = match parse_multipart_config(multipart).await {
         Ok(c) => c,
         Err(e) => return bad_request(&e),
@@ -83,10 +80,7 @@ pub async fn api_preview_webp(
     preview_image_response(state, config, OutputFormat::WebP, "image/webp").await
 }
 
-pub async fn api_preview_gif(
-    State(state): State<SharedState>,
-    multipart: Multipart,
-) -> Response {
+pub async fn api_preview_gif(State(state): State<SharedState>, multipart: Multipart) -> Response {
     let config = match parse_multipart_config(multipart).await {
         Ok(c) => c,
         Err(e) => return bad_request(&e),
@@ -105,10 +99,7 @@ struct PreviewJson {
     error: Option<String>,
 }
 
-pub async fn api_preview(
-    State(state): State<SharedState>,
-    multipart: Multipart,
-) -> Response {
+pub async fn api_preview(State(state): State<SharedState>, multipart: Multipart) -> Response {
     let config = match parse_multipart_config(multipart).await {
         Ok(c) => c,
         Err(e) => return bad_request(&e),
@@ -130,7 +121,17 @@ pub async fn api_preview(
     let timeout = state.timeout;
 
     let join = tokio::task::spawn_blocking(move || {
-        render_config(&path, &stripped, width, height, is_2x, OutputFormat::WebP, max_duration, locale, timezone)
+        render_config(
+            &path,
+            &stripped,
+            width,
+            height,
+            is_2x,
+            OutputFormat::WebP,
+            max_duration,
+            locale,
+            timezone,
+        )
     });
     let bytes = match tokio::time::timeout(timeout, join).await {
         Ok(Ok(Ok(b))) => b,
@@ -254,10 +255,7 @@ impl StringBool {
     }
 }
 
-pub async fn api_push(
-    State(state): State<SharedState>,
-    Json(req): Json<PushRequest>,
-) -> Response {
+pub async fn api_push(State(state): State<SharedState>, Json(req): Json<PushRequest>) -> Response {
     if req.device_id.is_empty() {
         return bad_request(&anyhow!("deviceID is required"));
     }
@@ -289,7 +287,17 @@ pub async fn api_push(
     let timeout = state.timeout;
 
     let render_join = tokio::task::spawn_blocking(move || {
-        render_config(&path, &stripped, width, height, is_2x, OutputFormat::WebP, max_duration, locale, timezone)
+        render_config(
+            &path,
+            &stripped,
+            width,
+            height,
+            is_2x,
+            OutputFormat::WebP,
+            max_duration,
+            locale,
+            timezone,
+        )
     });
     let bytes = match tokio::time::timeout(timeout, render_join).await {
         Ok(Ok(Ok(b))) => b,
@@ -369,8 +377,7 @@ pub async fn api_handler(
 
     match tokio::time::timeout(timeout, join).await {
         Ok(Ok(Ok(json_text))) => {
-            let parsed: Value =
-                serde_json::from_str(&json_text).unwrap_or(Value::Null);
+            let parsed: Value = serde_json::from_str(&json_text).unwrap_or(Value::Null);
             Json(parsed).into_response()
         }
         Ok(Ok(Err(e))) => render_error(StatusCode::INTERNAL_SERVER_ERROR, &e),
@@ -410,7 +417,17 @@ async fn preview_image_response(
     let timeout = state.timeout;
 
     let join = tokio::task::spawn_blocking(move || {
-        render_config(&path, &stripped, width, height, is_2x, format, max_duration, locale, timezone)
+        render_config(
+            &path,
+            &stripped,
+            width,
+            height,
+            is_2x,
+            format,
+            max_duration,
+            locale,
+            timezone,
+        )
     });
 
     let result: std::result::Result<Vec<u8>, (StatusCode, anyhow::Error)> =

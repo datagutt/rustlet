@@ -54,12 +54,14 @@ pub fn encode_handler_result(return_type: i8, value: Value<'_>) -> anyhow::Resul
             Ok(serde_json::to_string(&JsonValue::Array(arr))?)
         }
         RETURN_SCHEMA => {
-            let schema = value.downcast_ref::<StarlarkSchemaSchema>().ok_or_else(|| {
-                anyhow::anyhow!(
-                    "generated handler must return a schema.Schema, got {}",
-                    value.get_type()
-                )
-            })?;
+            let schema = value
+                .downcast_ref::<StarlarkSchemaSchema>()
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "generated handler must return a schema.Schema, got {}",
+                        value.get_type()
+                    )
+                })?;
             Ok(serde_json::to_string(&schema.to_json())?)
         }
         // pixlet's AsString: return the raw string body, not a JSON-quoted value.
@@ -124,44 +126,71 @@ pub fn validate_schema(schema: &StarlarkSchemaSchema) -> anyhow::Result<()> {
         let kind = f.kind.as_str();
 
         if !SCHEMA_FIELD_TYPES.contains(&kind) {
-            return Err(anyhow::anyhow!("schema field {id:?} has unknown type {kind:?}"));
+            return Err(anyhow::anyhow!(
+                "schema field {id:?} has unknown type {kind:?}"
+            ));
         }
         if f.id.is_empty() {
-            return Err(anyhow::anyhow!("schema field of type {kind:?} is missing a required id"));
+            return Err(anyhow::anyhow!(
+                "schema field of type {kind:?} is missing a required id"
+            ));
         }
         if f.id.contains('$') {
-            return Err(anyhow::anyhow!("schema field id {id:?} must not contain '$'"));
+            return Err(anyhow::anyhow!(
+                "schema field id {id:?} must not contain '$'"
+            ));
         }
         if matches!(
             kind,
-            "datetime" | "dropdown" | "location" | "locationbased" | "onoff" | "radio" | "text"
-                | "typeahead" | "png"
+            "datetime"
+                | "dropdown"
+                | "location"
+                | "locationbased"
+                | "onoff"
+                | "radio"
+                | "text"
+                | "typeahead"
+                | "png"
         ) && f.name.is_empty()
         {
-            return Err(anyhow::anyhow!("schema field {id:?} of type {kind:?} requires a name"));
+            return Err(anyhow::anyhow!(
+                "schema field {id:?} of type {kind:?} requires a name"
+            ));
         }
         if kind == "generated" && !f.icon.is_empty() {
-            return Err(anyhow::anyhow!("schema field {id:?} of type generated must not set an icon"));
+            return Err(anyhow::anyhow!(
+                "schema field {id:?} of type generated must not set an icon"
+            ));
         }
         if matches!(kind, "dropdown" | "onoff" | "radio")
             && f.default.as_deref().unwrap_or("").is_empty()
         {
-            return Err(anyhow::anyhow!("schema field {id:?} of type {kind:?} requires a default"));
+            return Err(anyhow::anyhow!(
+                "schema field {id:?} of type {kind:?} requires a default"
+            ));
         }
         if matches!(kind, "dropdown" | "radio") && f.options.as_deref().unwrap_or(&[]).is_empty() {
-            return Err(anyhow::anyhow!("schema field {id:?} of type {kind:?} requires options"));
+            return Err(anyhow::anyhow!(
+                "schema field {id:?} of type {kind:?} requires options"
+            ));
         }
         if kind == "generated" && f.source.as_deref().unwrap_or("").is_empty() {
-            return Err(anyhow::anyhow!("schema field {id:?} of type generated requires a source"));
+            return Err(anyhow::anyhow!(
+                "schema field {id:?} of type generated requires a source"
+            ));
         }
         if matches!(kind, "generated" | "locationbased" | "typeahead" | "oauth2")
             && f.handler_name.as_deref().unwrap_or("").is_empty()
         {
-            return Err(anyhow::anyhow!("schema field {id:?} of type {kind:?} requires a handler"));
+            return Err(anyhow::anyhow!(
+                "schema field {id:?} of type {kind:?} requires a handler"
+            ));
         }
         if kind == "oauth2" {
             if f.client_id.as_deref().unwrap_or("").is_empty() {
-                return Err(anyhow::anyhow!("schema field {id:?} of type oauth2 requires a client_id"));
+                return Err(anyhow::anyhow!(
+                    "schema field {id:?} of type oauth2 requires a client_id"
+                ));
             }
             if f.authorization_endpoint.as_deref().unwrap_or("").is_empty() {
                 return Err(anyhow::anyhow!(
@@ -169,7 +198,9 @@ pub fn validate_schema(schema: &StarlarkSchemaSchema) -> anyhow::Result<()> {
                 ));
             }
             if f.scopes.as_deref().unwrap_or(&[]).is_empty() {
-                return Err(anyhow::anyhow!("schema field {id:?} of type oauth2 requires scopes"));
+                return Err(anyhow::anyhow!(
+                    "schema field {id:?} of type oauth2 requires scopes"
+                ));
             }
         }
         if f.secret == Some(true) && kind != "text" {
@@ -180,10 +211,14 @@ pub fn validate_schema(schema: &StarlarkSchemaSchema) -> anyhow::Result<()> {
         if let Some(opts) = &f.options {
             for (i, o) in opts.iter().enumerate() {
                 if o.text.is_empty() {
-                    return Err(anyhow::anyhow!("schema field {id:?} option {i} requires text"));
+                    return Err(anyhow::anyhow!(
+                        "schema field {id:?} option {i} requires text"
+                    ));
                 }
                 if o.value.is_empty() {
-                    return Err(anyhow::anyhow!("schema field {id:?} option {i} requires a value"));
+                    return Err(anyhow::anyhow!(
+                        "schema field {id:?} option {i} requires a value"
+                    ));
                 }
             }
         }
@@ -191,10 +226,14 @@ pub fn validate_schema(schema: &StarlarkSchemaSchema) -> anyhow::Result<()> {
     for n in &schema.notifications {
         let id = &n.id;
         if n.id.is_empty() {
-            return Err(anyhow::anyhow!("schema notification is missing a required id"));
+            return Err(anyhow::anyhow!(
+                "schema notification is missing a required id"
+            ));
         }
         if n.id.contains('$') {
-            return Err(anyhow::anyhow!("schema notification id {id:?} must not contain '$'"));
+            return Err(anyhow::anyhow!(
+                "schema notification id {id:?} must not contain '$'"
+            ));
         }
         if n.sounds.is_empty() {
             return Err(anyhow::anyhow!(
@@ -203,7 +242,9 @@ pub fn validate_schema(schema: &StarlarkSchemaSchema) -> anyhow::Result<()> {
         }
         for (i, s) in n.sounds.iter().enumerate() {
             if s.id.is_empty() {
-                return Err(anyhow::anyhow!("schema notification {id:?} sound {i} requires an id"));
+                return Err(anyhow::anyhow!(
+                    "schema notification {id:?} sound {i} requires an id"
+                ));
             }
             if s.title.is_empty() {
                 return Err(anyhow::anyhow!(
@@ -480,7 +521,10 @@ impl<'v> StarlarkValue<'v> for StarlarkSound {
     }
 
     fn dir_attr(&self) -> Vec<String> {
-        ["id", "title", "path"].iter().map(|s| s.to_string()).collect()
+        ["id", "title", "path"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
     }
 
     fn get_attr(&self, attribute: &str, heap: &'v Heap) -> Option<Value<'v>> {
@@ -553,7 +597,10 @@ impl StarlarkSchemaSchema {
     pub fn to_json(&self) -> JsonValue {
         let schema_arr: Vec<JsonValue> = self.fields.iter().map(|f| f.to_json()).collect();
         let mut map = Map::new();
-        map.insert("version".to_string(), JsonValue::String(self.version.clone()));
+        map.insert(
+            "version".to_string(),
+            JsonValue::String(self.version.clone()),
+        );
         map.insert("schema".to_string(), JsonValue::Array(schema_arr));
         // pixlet tags Notifications `omitempty`, so omit the key entirely when
         // there are none (schema.go:33) rather than emitting an empty array.
@@ -625,8 +672,8 @@ fn collect_string_list(value: Value<'_>) -> anyhow::Result<Option<Vec<String>>> 
     if value.is_none() {
         return Ok(None);
     }
-    let list = ListRef::from_value(value)
-        .ok_or_else(|| anyhow::anyhow!("expected list of strings"))?;
+    let list =
+        ListRef::from_value(value).ok_or_else(|| anyhow::anyhow!("expected list of strings"))?;
     let mut out = Vec::with_capacity(list.len());
     for item in list.iter() {
         if let Some(s) = item.unpack_str() {
@@ -731,12 +778,12 @@ pub fn schema_module(builder: &mut GlobalsBuilder) {
                         "notifications must be passed to schema.Schema via notifications=, not in fields"
                     ));
                 }
-                let f = item
-                    .downcast_ref::<StarlarkSchemaField>()
-                    .ok_or_else(|| anyhow::anyhow!(
+                let f = item.downcast_ref::<StarlarkSchemaField>().ok_or_else(|| {
+                    anyhow::anyhow!(
                         "expected schema field in fields list, got {}",
                         item.get_type()
-                    ))?;
+                    )
+                })?;
                 schema_fields.push(f.inner.clone());
             }
         }
@@ -778,7 +825,11 @@ pub fn schema_module(builder: &mut GlobalsBuilder) {
                 name: name.to_string(),
                 description: desc.to_string(),
                 icon: icon.to_string(),
-                default: Some(if default { "true".to_string() } else { "false".to_string() }),
+                default: Some(if default {
+                    "true".to_string()
+                } else {
+                    "false".to_string()
+                }),
                 secret: None,
                 options: None,
                 source: None,
@@ -1105,8 +1156,9 @@ pub fn schema_module(builder: &mut GlobalsBuilder) {
                 list.iter()
                     .enumerate()
                     .map(|(i, c)| {
-                        normalize_hex_color(c)
-                            .map_err(|e| anyhow::anyhow!("malformed palette color at index {i}: {e}"))
+                        normalize_hex_color(c).map_err(|e| {
+                            anyhow::anyhow!("malformed palette color at index {i}: {e}")
+                        })
                     })
                     .collect::<anyhow::Result<Vec<_>>>()
             })

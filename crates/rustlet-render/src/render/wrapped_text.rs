@@ -286,9 +286,9 @@ impl Widget for WrappedText {
                         for col in 0..glyph.width as u8 {
                             if glyph.pixel(col, row) {
                                 let px = cursor_x + glyph.x_offset as i32 + col as i32;
-                                let py = line_baseline - glyph.y_offset as i32
-                                    - glyph.height as i32
-                                    + row as i32;
+                                let py =
+                                    line_baseline - glyph.y_offset as i32 - glyph.height as i32
+                                        + row as i32;
                                 if px >= bounds.x
                                     && (px as usize) < dst_w
                                     && py >= bounds.y

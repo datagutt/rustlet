@@ -482,12 +482,9 @@ pub(crate) fn run_lint(paths: &[PathBuf], recursive: bool) -> Result<bool> {
             }
         }
 
-        let src = std::fs::read_to_string(file)
-            .with_context(|| format!("reading {}", file.display()))?;
-        let id = file
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("app");
+        let src =
+            std::fs::read_to_string(file).with_context(|| format!("reading {}", file.display()))?;
+        let id = file.file_stem().and_then(|s| s.to_str()).unwrap_or("app");
         let base_dir = file.parent();
         match applet.lint_source(id, &src, base_dir) {
             Ok(issues) => {
@@ -514,11 +511,7 @@ pub(crate) fn run_lint(paths: &[PathBuf], recursive: bool) -> Result<bool> {
 pub(crate) fn run_format(paths: &[PathBuf], dry_run: bool, recursive: bool) -> Result<bool> {
     let buildifier = std::env::var("BUILDIFIER").unwrap_or_else(|_| "buildifier".to_string());
     // Verify buildifier is on PATH.
-    if Command::new(&buildifier)
-        .arg("--version")
-        .output()
-        .is_err()
-    {
+    if Command::new(&buildifier).arg("--version").output().is_err() {
         bail!(
             "`{buildifier}` not found on PATH. Install it from https://github.com/bazelbuild/buildtools \
              (e.g. `go install github.com/bazelbuild/buildtools/buildifier@latest`) and re-run."
@@ -640,8 +633,11 @@ fn run() -> Result<ExitCode> {
             // pixlet: 2x only when explicitly requested AND the manifest
             // declares `supports2x`; otherwise 1x. Never auto-promote from the
             // manifest, and never double magnify as a fallback (loader.go:391).
-            let manifest_supports_2x =
-                loaded.manifest.as_ref().map(|m| m.supports2x).unwrap_or(false);
+            let manifest_supports_2x = loaded
+                .manifest
+                .as_ref()
+                .map(|m| m.supports2x)
+                .unwrap_or(false);
             let is_2x = resolve_2x(double, manifest_supports_2x);
             let (render_width, render_height) = if is_2x { (128, 64) } else { (width, height) };
 
@@ -897,4 +893,3 @@ fn run() -> Result<ExitCode> {
 
     Ok(ExitCode::SUCCESS)
 }
-

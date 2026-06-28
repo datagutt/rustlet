@@ -61,8 +61,7 @@ pub(crate) fn starlark_to_serde(value: Value) -> anyhow::Result<serde_json::Valu
     }
 
     if let Some(tuple) = TupleRef::from_value(value) {
-        let arr: Result<Vec<serde_json::Value>, _> =
-            tuple.iter().map(starlark_to_serde).collect();
+        let arr: Result<Vec<serde_json::Value>, _> = tuple.iter().map(starlark_to_serde).collect();
         return Ok(serde_json::Value::Array(arr?));
     }
 

@@ -69,25 +69,23 @@ impl Transform {
     /// to fall back to matrix-level interpolation, which we don't yet support.
     pub fn interpolate(&self, other: &Transform, t: f64) -> Option<Transform> {
         match (*self, *other) {
-            (
-                Transform::Translate { x: x1, y: y1 },
-                Transform::Translate { x: x2, y: y2 },
-            ) => Some(Transform::Translate {
-                x: lerp(x1, x2, t),
-                y: lerp(y1, y2, t),
-            }),
+            (Transform::Translate { x: x1, y: y1 }, Transform::Translate { x: x2, y: y2 }) => {
+                Some(Transform::Translate {
+                    x: lerp(x1, x2, t),
+                    y: lerp(y1, y2, t),
+                })
+            }
             (Transform::Rotate { angle: a1 }, Transform::Rotate { angle: a2 }) => {
                 Some(Transform::Rotate {
                     angle: lerp(a1, a2, t),
                 })
             }
-            (
-                Transform::Scale { x: x1, y: y1 },
-                Transform::Scale { x: x2, y: y2 },
-            ) => Some(Transform::Scale {
-                x: lerp(x1, x2, t),
-                y: lerp(y1, y2, t),
-            }),
+            (Transform::Scale { x: x1, y: y1 }, Transform::Scale { x: x2, y: y2 }) => {
+                Some(Transform::Scale {
+                    x: lerp(x1, x2, t),
+                    y: lerp(y1, y2, t),
+                })
+            }
             (
                 Transform::Shear {
                     x_angle: xa1,

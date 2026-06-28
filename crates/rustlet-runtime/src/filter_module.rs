@@ -10,7 +10,7 @@ use starlark::values::{Value, ValueLike};
 use rustlet_render::{
     FilterBlur, FilterBrightness, FilterContrast, FilterEdgeDetection, FilterEmboss,
     FilterFlipHorizontal, FilterFlipVertical, FilterGamma, FilterGrayscale, FilterHue,
-    FilterInvert, FilterRotate, FilterSaturation, FilterSepia, FilterShear, FilterSharpen,
+    FilterInvert, FilterRotate, FilterSaturation, FilterSepia, FilterSharpen, FilterShear,
     FilterThreshold, Widget,
 };
 
@@ -23,10 +23,7 @@ fn to_f64(value: Value) -> anyhow::Result<f64> {
     if let Some(f) = value.downcast_ref::<StarlarkFloat>() {
         return Ok(f.0);
     }
-    Err(anyhow::anyhow!(
-        "expected number, got {}",
-        value.get_type()
-    ))
+    Err(anyhow::anyhow!("expected number, got {}", value.get_type()))
 }
 
 fn attr(name: &str, value: WidgetAttrValue) -> WidgetAttr {
@@ -49,7 +46,8 @@ pub fn filter_module(builder: &mut GlobalsBuilder) {
         radius: Value<'v>,
         eval: &mut Evaluator<'v, '_, '_>,
     ) -> anyhow::Result<Value<'v>> {
-        let radius = to_f64(radius)?; let w = FilterBlur {
+        let radius = to_f64(radius)?;
+        let w = FilterBlur {
             child: take_child(child)?,
             radius,
         };
@@ -108,10 +106,7 @@ pub fn filter_module(builder: &mut GlobalsBuilder) {
         )))
     }
 
-    fn Emboss<'v>(
-        child: Value<'v>,
-        eval: &mut Evaluator<'v, '_, '_>,
-    ) -> anyhow::Result<Value<'v>> {
+    fn Emboss<'v>(child: Value<'v>, eval: &mut Evaluator<'v, '_, '_>) -> anyhow::Result<Value<'v>> {
         let w = FilterEmboss {
             child: take_child(child)?,
         };
@@ -198,10 +193,7 @@ pub fn filter_module(builder: &mut GlobalsBuilder) {
         )))
     }
 
-    fn Invert<'v>(
-        child: Value<'v>,
-        eval: &mut Evaluator<'v, '_, '_>,
-    ) -> anyhow::Result<Value<'v>> {
+    fn Invert<'v>(child: Value<'v>, eval: &mut Evaluator<'v, '_, '_>) -> anyhow::Result<Value<'v>> {
         let w = FilterInvert {
             child: take_child(child)?,
         };
@@ -246,18 +238,13 @@ pub fn filter_module(builder: &mut GlobalsBuilder) {
         )))
     }
 
-    fn Sepia<'v>(
-        child: Value<'v>,
-        eval: &mut Evaluator<'v, '_, '_>,
-    ) -> anyhow::Result<Value<'v>> {
+    fn Sepia<'v>(child: Value<'v>, eval: &mut Evaluator<'v, '_, '_>) -> anyhow::Result<Value<'v>> {
         let w = FilterSepia {
             child: take_child(child)?,
         };
-        Ok(eval.heap().alloc(StarlarkWidget::new_with_attrs(
-            Box::new(w),
-            "Sepia",
-            vec![],
-        )))
+        Ok(eval
+            .heap()
+            .alloc(StarlarkWidget::new_with_attrs(Box::new(w), "Sepia", vec![])))
     }
 
     fn Sharpen<'v>(

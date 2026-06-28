@@ -136,20 +136,17 @@ fn validate_schema_icons(
     applet: &rustlet_runtime::Applet,
     loaded: &crate::util::LoadedApplet,
 ) -> Result<()> {
-    let schema_json = match applet.schema_json(
-        &loaded.id,
-        &loaded.source,
-        loaded.base_dir.as_deref(),
-    ) {
-        Ok(s) => s,
-        Err(e) => {
-            // No get_schema() is fine; pixlet's check also tolerates schema-less apps.
-            if e.to_string().contains("get_schema") {
-                return Ok(());
+    let schema_json =
+        match applet.schema_json(&loaded.id, &loaded.source, loaded.base_dir.as_deref()) {
+            Ok(s) => s,
+            Err(e) => {
+                // No get_schema() is fine; pixlet's check also tolerates schema-less apps.
+                if e.to_string().contains("get_schema") {
+                    return Ok(());
+                }
+                return Err(e);
             }
-            return Err(e);
-        }
-    };
+        };
     validate_schema_icons_json(&schema_json)
 }
 

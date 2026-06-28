@@ -216,8 +216,8 @@ impl Widget for Grayscale {
         };
         for_each_pixel(&mut src, |px| {
             with_unpremultiplied(px, |r, g, b| {
-                let y = (0.299 * r as f32 + 0.587 * g as f32 + 0.114 * b as f32)
-                    .clamp(0.0, 255.0) as u8;
+                let y = (0.299 * r as f32 + 0.587 * g as f32 + 0.114 * b as f32).clamp(0.0, 255.0)
+                    as u8;
                 (y, y, y)
             });
         });

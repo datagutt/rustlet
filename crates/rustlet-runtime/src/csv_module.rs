@@ -102,15 +102,11 @@ pub fn build_csv_globals() -> starlark::environment::Globals {
 fn csv_delimiter(value: &str, name: &str) -> anyhow::Result<u8> {
     let bytes = value.as_bytes();
     if bytes.len() != 1 {
-        return Err(anyhow::anyhow!(
-            "{name} must be a single-byte character"
-        ));
+        return Err(anyhow::anyhow!("{name} must be a single-byte character"));
     }
     let byte = bytes[0];
     if byte == b'\n' || byte == b'\r' {
-        return Err(anyhow::anyhow!(
-            "{name} must be a non-newline character"
-        ));
+        return Err(anyhow::anyhow!("{name} must be a non-newline character"));
     }
     Ok(byte)
 }

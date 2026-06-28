@@ -335,7 +335,10 @@ mod tests {
         // 'č' (U+010D) is absent from tom-thumb. pixlet contributes 0 advance
         // for missing glyphs, so a missing glyph must not add any width.
         let font = get_font("tom-thumb");
-        assert!(font.glyph('č').is_none(), "test assumes č is absent from tom-thumb");
+        assert!(
+            font.glyph('č').is_none(),
+            "test assumes č is absent from tom-thumb"
+        );
         assert_eq!(font.measure_width("č"), 0);
         assert_eq!(font.measure_width("ač"), font.measure_width("a"));
     }

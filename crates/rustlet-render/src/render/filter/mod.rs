@@ -36,12 +36,7 @@ pub(crate) fn render_child_to_pixmap(
     Some((pixmap, cb))
 }
 
-pub(crate) fn composite_pixmap(
-    dest: &mut Pixmap,
-    src: &Pixmap,
-    x: i32,
-    y: i32,
-) {
+pub(crate) fn composite_pixmap(dest: &mut Pixmap, src: &Pixmap, x: i32, y: i32) {
     let paint = PixmapPaint {
         opacity: 1.0,
         blend_mode: tiny_skia::BlendMode::SourceOver,

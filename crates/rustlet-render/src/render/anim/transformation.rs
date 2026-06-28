@@ -103,7 +103,12 @@ impl Widget for Transformation {
         };
         self.child.paint(
             &mut child_pixmap,
-            Rect::new(0, 0, child_bounds.x + child_bounds.width, child_bounds.y + child_bounds.height),
+            Rect::new(
+                0,
+                0,
+                child_bounds.x + child_bounds.width,
+                child_bounds.y + child_bounds.height,
+            ),
             frame_idx,
         );
 
@@ -113,12 +118,9 @@ impl Widget for Transformation {
             self.origin.y * child_bounds.height as f64 + child_bounds.y as f64,
         );
 
-        let mut progress = self.direction.progress(
-            self.delay,
-            self.duration,
-            self.fill_mode.value(),
-            frame_idx,
-        );
+        let mut progress =
+            self.direction
+                .progress(self.delay, self.duration, self.fill_mode.value(), frame_idx);
 
         // Start with identity and translate by the target bounds' x/y so the child lands
         // at the right spot in the output pixmap.
@@ -129,7 +131,8 @@ impl Widget for Transformation {
             progress = rescale(from.percentage, to.percentage, 0.0, 1.0, progress);
             progress = from.curve.transform(progress);
 
-            let (transforms, ok) = interpolate_transforms(&from.transforms, &to.transforms, progress);
+            let (transforms, ok) =
+                interpolate_transforms(&from.transforms, &to.transforms, progress);
             if ok {
                 for t in transforms {
                     ts = t.apply(ts, origin, self.rounding);

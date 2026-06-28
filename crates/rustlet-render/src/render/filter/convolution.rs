@@ -7,23 +7,11 @@ use super::{composite_pixmap, render_child_to_pixmap};
 use crate::render::{Rect, Widget};
 use tiny_skia::Pixmap;
 
-const SHARPEN_KERNEL: [[f32; 3]; 3] = [
-    [0.0, -1.0, 0.0],
-    [-1.0, 5.0, -1.0],
-    [0.0, -1.0, 0.0],
-];
+const SHARPEN_KERNEL: [[f32; 3]; 3] = [[0.0, -1.0, 0.0], [-1.0, 5.0, -1.0], [0.0, -1.0, 0.0]];
 
-const EDGE_KERNEL: [[f32; 3]; 3] = [
-    [-1.0, -1.0, -1.0],
-    [-1.0, 8.0, -1.0],
-    [-1.0, -1.0, -1.0],
-];
+const EDGE_KERNEL: [[f32; 3]; 3] = [[-1.0, -1.0, -1.0], [-1.0, 8.0, -1.0], [-1.0, -1.0, -1.0]];
 
-const EMBOSS_KERNEL: [[f32; 3]; 3] = [
-    [-2.0, -1.0, 0.0],
-    [-1.0, 1.0, 1.0],
-    [0.0, 1.0, 2.0],
-];
+const EMBOSS_KERNEL: [[f32; 3]; 3] = [[-2.0, -1.0, 0.0], [-1.0, 1.0, 1.0], [0.0, 1.0, 2.0]];
 
 fn apply_kernel(src: &Pixmap, kernel: &[[f32; 3]; 3], offset: f32) -> Option<Pixmap> {
     let w = src.width() as i32;
