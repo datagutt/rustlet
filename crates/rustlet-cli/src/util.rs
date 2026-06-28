@@ -355,7 +355,7 @@ pub fn render_bytes(
     let delay_ms = root.delay as u16;
 
     rustlet_encode::apply_filter(&mut frames, opts.color_filter);
-    let frames = rustlet_encode::magnify(&frames, magnify);
+    let frames = rustlet_encode::magnify(&frames, magnify)?;
 
     rustlet_encode::encode_with_max_duration(&frames, delay_ms, opts.format, opts.max_duration)
         .context("encoding frames")
