@@ -13,7 +13,7 @@ Rustlet is a Rust reimplementation of [Pixlet](https://github.com/tidbyt/pixlet)
 cargo build
 cargo build --release
 
-# test (183 tests across all crates)
+# test (336 tests across all crates)
 cargo test
 cargo test -p rustlet-render
 cargo test -p rustlet-runtime
@@ -30,8 +30,8 @@ cargo clippy --workspace
 cargo run -p rustlet-cli -- render examples/hello_world.star -o output.gif
 cargo run -p rustlet-cli -- render examples/hello_world.star -o output.webp
 
-# update snapshot tests (rustlet-render uses insta)
-cargo insta review
+# render parity oracle (compares rustlet output against pixlet golden frames)
+cargo test -p rustlet-compat
 ```
 
 ## Architecture
@@ -50,7 +50,7 @@ rustlet-cli  ->  rustlet-runtime  ->  rustlet-render
 
 **rustlet-encode**: Encodes `Vec<Pixmap>` frames into animated GIF (256-color quantized) or WebP (lossless). Also provides 14 color filters (applied as 3x3 color matrices) and integer magnification.
 
-**rustlet-cli**: Clap-based CLI binary with a single `render` subcommand.
+**rustlet-cli**: Clap-based CLI binary. Subcommands: `render`, `serve`, `push`, `devices`, `list`, `delete`, `api`, `config`, `login`, `schema`, `lint`, `format`, `check`, `profile`, `create`, `completion`, `community`, `version`. The `--help` output is the source of truth for the full set.
 
 ### Rendering pipeline
 
@@ -65,7 +65,8 @@ Widget constructors in `render_module.rs` are native Starlark functions. Each cr
 
 ### Key design decisions
 
-- Time handling is hand-rolled (no chrono). Timezone support uses a static offset table (~60 IANA zones, no DST).
+- Time handling is largely hand-rolled. Two date libraries are pulled in only where their APIs require it: `jiff` resolves DST-aware IANA timezone offsets in `starlark_time.rs`, and `chrono::NaiveDate` appears in `sunrise_module.rs` because the `sunrise` crate's `SolarDay::new` takes one.
+- Text bidirectional reordering uses the full Unicode Bidirectional Algorithm (UBA L2 reorder), which is more correct than pixlet's simpler single-level run reversal. This is an intentional deviation, not a bug.
 - HTTP caching is in-memory (`LazyLock<Mutex<HashMap>>`) with TTL-based expiry, evicted at 256 entries.
 - Emoji rendering uses resvg with Twemoji SVGs (configurable directory), falling back to a colored placeholder.
 - Fonts are BDF bitmap fonts rendered pixel-by-pixel to Pixmap. No anti-aliasing (appropriate for pixel displays).

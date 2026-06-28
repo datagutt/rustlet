@@ -1,5 +1,12 @@
 # Pixlet Compatibility Audit
 
+> **Status (2026-06-28): superseded.** Active compatibility work and the remaining
+> gaps are now tracked in [`plans/README.md`](plans/README.md), which is the single
+> source of truth. This file is kept for historical context only. The checkboxes
+> below reflect the audit as originally written and lag the current code in places
+> (for example `serve`, `push`, `devices`, `api`, `login`, and the render parity
+> oracle all exist now).
+
 This file tracks the work required to make `rustlet` behave like the reference implementation in `.reference/pixlet`.
 
 Scope for this audit:
@@ -46,16 +53,18 @@ Scope for this audit:
 - [ ] Text rendering still differs from Pixlet in shaping and exact measurement/layout, even after adding bidi reordering and atlas-backed emoji handling.
 - [ ] Wrapped text still differs from Pixlet's actual text measurement and wrapping flow, though bidi-aware default alignment, visual ordering, and measured word-breaking are now in place.
 - [x] Animated GIF image handling should be verified against Pixlet disposal/delay behavior.
-- [ ] Rendering parity is not being checked against reference Pixlet tests/snapshots yet.
+- [x] Rendering parity is now checked in CI against pixlet golden frames via the `rustlet-compat` oracle.
 
 ### CLI / tooling gaps
 
 - [x] CLI surface is far smaller than Pixlet: only `render` exists today.
 - [x] Missing core Pixlet commands and workflows:
-  `lint`, `format`, `schema`, `version`, and manifest-aware validation flows. (`serve` still pending.)
-- [x] 2x CLI behavior is only partially compatible with Pixlet.
+  `lint`, `format`, `schema`, `version`, and manifest-aware validation flows.
+- [x] 2x CLI behavior matches pixlet (renders 128x64 only when the manifest declares `supports2x`, no auto-promote, no magnify fallback).
 
-Remaining CLI gap: `serve` subcommand (live preview HTTP server).
+The `serve` live-preview HTTP server is implemented, along with `push`, `devices`,
+`list`, `delete`, `api`, and `login`. See `plans/README.md` for the narrower
+remaining serve gaps (websocket protocol, React schema form, shared render cache).
 
 ## Phased Plan
 
@@ -138,7 +147,7 @@ Suggested commit:
 
 Goal: close the gap between `rustlet` and the `pixlet` developer workflow.
 
-- [x] Add missing CLI subcommands in priority order: `version`, `lint`, `schema`, `format`. (`serve` still pending.)
+- [x] Add missing CLI subcommands in priority order: `version`, `lint`, `schema`, `format`, `serve`, and the device/server commands (`push`, `devices`, `list`, `delete`, `api`, `login`).
 - [x] Implement manifest-aware validation paths.
 - [x] Align 2x CLI defaults and output naming with Pixlet.
 

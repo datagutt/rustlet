@@ -122,12 +122,28 @@ rustlet-cli render clock.star --format webp -o clock.webp
 rustlet-cli <COMMAND>
 
 Commands:
-  render   Render a .star file to an image
-  lint     Lint a .star file or app directory (parses, sandbox evaluates, validates manifest.yaml)
-  format   Format .star files (requires `buildifier` on $PATH, same tool pixlet uses)
-  schema   Print the configuration schema for a Rustlet app
-  version  Show the version of Rustlet
+  render      Render a .star file or app directory to an image
+  serve       Run a live dev server with reload and preview
+  push        Push a WebP image to a Tronbyt or Tidbyt device
+  devices     List devices registered to the configured account
+  list        List installations currently on a device
+  delete      Delete an installation from a device
+  login       Prompt for URL and API token, verify them, then persist
+  config      Read or write the persisted API config
+  api         Run an HTTP render server for other tools
+  schema      Print the configuration schema for a Rustlet app
+  lint        Lint a .star file or app directory (parses, sandbox evaluates, validates manifest.yaml)
+  format      Format .star files (requires `buildifier` on $PATH, same tool pixlet uses)
+  check       Check apps for manifest, icon, render, format, and lint issues
+  profile     Profile an applet's starlark execution
+  create      Scaffold a new applet in the current directory
+  completion  Print a shell completion script
+  community   Tronbyt community helpers (manifest validation, asset listings)
+  version     Show the version of Rustlet
 ```
+
+`format` shells out to `buildifier` (the same tool pixlet uses), so it must be on
+your `$PATH`. Unlike pixlet, rustlet does not embed it.
 
 ### `render` options
 
@@ -139,10 +155,11 @@ Commands:
                            red-shift, warm, sunset, sepia, vintage, dusk, cool,
                            bw, ice, moonlight, neon, pastel)
 --magnify <MAGNIFY>        Integer magnification factor [default: 1]
---2x                       Double the canvas size (128x64), use terminus-16 as
-                           the default font. Auto-enabled when the manifest
-                           declares `supports2x: true` and the applet is loaded
-                           from a directory.
+--2x                       Render at 128x64 with terminus-16 as the default
+                           font. Takes effect only when the manifest declares
+                           `supports2x: true`; otherwise the applet renders at
+                           1x (64x32), matching pixlet. Never auto-enabled, and
+                           never falls back to magnification.
 --twemoji-dir <PATH>       Directory containing Twemoji SVG files, named by
                            codepoint (e.g. `1f600.svg`)
 ```
@@ -164,16 +181,17 @@ Commands:
 
 Rustlet is a work in progress reimplementation, focused on matching pixlet's
 rendering output. The core `render` pipeline, the Starlark standard library, and
-the `lint` / `format` / `schema` subcommands are implemented. Features that
-talk to device or server infrastructure (`pixlet serve`, `pixlet push`,
-`pixlet login`, `pixlet devices`) are not implemented.
+the full CLI surface are implemented, including the device and server commands
+`serve`, `push`, `devices`, `list`, `delete`, `api`, and `login`. The remaining
+gaps are narrower: the `serve` websocket protocol, the React schema form, and a
+shared render cache are not yet built (tracked in `plans/`).
 
 ## Testing
 
 ```bash
 cargo test                        # run the full test suite
 cargo test -p rustlet-render      # just the renderer
-cargo insta review                # review snapshot diffs (rustlet-render uses insta)
+cargo test -p rustlet-compat      # render parity oracle vs pixlet golden frames
 ```
 
 ## Credits
