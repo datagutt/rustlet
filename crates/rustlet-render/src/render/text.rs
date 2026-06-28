@@ -181,7 +181,7 @@ fn draw_text_segment(
             }
             *cursor_x += glyph.advance as i32;
         } else {
-            *cursor_x += font.char_width as i32;
+            // Glyph absent from the font: pixlet skips it with 0 advance.
         }
 
         if *cursor_x >= MAX_TEXT_WIDTH {

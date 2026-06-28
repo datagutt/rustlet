@@ -63,8 +63,7 @@
       "kind": "fixture",
       "path": "fixtures/text_missing_glyph.star",
       "output_format": "webp",
-      "policy": "known_diff",
-      "reason": "unknown-glyph advance bug — flip to exact when plan 014 lands"
+      "policy": "exact"
     },
     {
       "id": "canvas_fake_events_app",

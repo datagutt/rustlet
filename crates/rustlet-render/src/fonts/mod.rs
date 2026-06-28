@@ -51,7 +51,9 @@ impl BitmapFont {
                 self.glyphs
                     .get(&ch)
                     .map(|g| g.advance as i32)
-                    .unwrap_or(self.char_width as i32)
+                    // Glyph absent from the font: pixlet's drawer skips it with
+                    // 0 advance, so it must not contribute width here either.
+                    .unwrap_or(0)
             })
             .sum()
     }
@@ -326,6 +328,16 @@ mod tests {
         let a_advance = font.glyph('A').map(|g| g.advance).unwrap_or(0);
         let sp_advance = font.glyph(' ').map(|g| g.advance).unwrap_or(0);
         assert_eq!(font.measure_width("A "), (a_advance + sp_advance) as i32);
+    }
+
+    #[test]
+    fn measure_width_skips_missing_glyph() {
+        // 'č' (U+010D) is absent from tom-thumb. pixlet contributes 0 advance
+        // for missing glyphs, so a missing glyph must not add any width.
+        let font = get_font("tom-thumb");
+        assert!(font.glyph('č').is_none(), "test assumes č is absent from tom-thumb");
+        assert_eq!(font.measure_width("č"), 0);
+        assert_eq!(font.measure_width("ač"), font.measure_width("a"));
     }
 
     #[test]
