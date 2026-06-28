@@ -1,5 +1,4 @@
 use std::fmt;
-use std::io::Read;
 
 use allocative::Allocative;
 use flate2::read::DeflateDecoder;
@@ -207,9 +206,11 @@ fn read_entry_data(bytes: &[u8], entry: &ZipEntryInfo) -> anyhow::Result<Vec<u8>
     match entry.compression_method {
         0 => Ok(compressed.to_vec()),
         8 => {
-            let mut decoder = DeflateDecoder::new(compressed);
-            let mut decoded = Vec::new();
-            decoder.read_to_end(&mut decoded)?;
+            let decoder = DeflateDecoder::new(compressed);
+            let decoded = crate::io_limit::read_to_end_limited(
+                decoder,
+                crate::io_limit::MAX_DECOMPRESSED_BYTES,
+            )?;
             Ok(decoded)
         }
         method => Err(anyhow::anyhow!(

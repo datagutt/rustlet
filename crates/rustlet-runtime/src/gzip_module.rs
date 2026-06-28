@@ -1,5 +1,3 @@
-use std::io::Read;
-
 use flate2::read::GzDecoder;
 use starlark::environment::GlobalsBuilder;
 use starlark::eval::Evaluator;
@@ -25,11 +23,10 @@ pub fn gzip_module(builder: &mut GlobalsBuilder) {
             ));
         };
 
-        let mut decoder = GzDecoder::new(input.as_slice());
-        let mut output = Vec::new();
-        decoder
-            .read_to_end(&mut output)
-            .map_err(|e| anyhow::anyhow!("gzip decompress error: {e}"))?;
+        let decoder = GzDecoder::new(input.as_slice());
+        let output =
+            crate::io_limit::read_to_end_limited(decoder, crate::io_limit::MAX_DECOMPRESSED_BYTES)
+                .map_err(|e| anyhow::anyhow!("gzip decompress error: {e}"))?;
 
         match std::str::from_utf8(&output) {
             Ok(text) => Ok(eval.heap().alloc(text)),

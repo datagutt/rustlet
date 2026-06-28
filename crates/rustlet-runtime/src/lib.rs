@@ -15,6 +15,7 @@ mod html_module;
 mod http_module;
 mod humanize_module;
 mod i18n_module;
+mod io_limit;
 mod json_module;
 pub mod manifest;
 mod math_module;
