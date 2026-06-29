@@ -131,7 +131,8 @@ async fn handle_render(
     let sandboxed = match sandbox_path(&state.root, &req.path) {
         Ok(p) => p,
         Err(e) => {
-            return (StatusCode::BAD_REQUEST, format!("path rejected: {e:#}")).into_response()
+            eprintln!("api path rejected: {e:#}");
+            return (StatusCode::BAD_REQUEST, "path rejected").into_response();
         }
     };
 
@@ -165,16 +166,14 @@ async fn handle_render(
             .header(header::CACHE_CONTROL, "no-store")
             .body(bytes.into())
             .unwrap(),
-        Ok(Ok(Err(e))) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("render failed: {e:#}"),
-        )
-            .into_response(),
-        Ok(Err(join_err)) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("render task panicked: {join_err}"),
-        )
-            .into_response(),
+        Ok(Ok(Err(e))) => {
+            eprintln!("api render failed: {e:#}");
+            (StatusCode::INTERNAL_SERVER_ERROR, "render failed").into_response()
+        }
+        Ok(Err(join_err)) => {
+            eprintln!("api render task panicked: {join_err}");
+            (StatusCode::INTERNAL_SERVER_ERROR, "internal error").into_response()
+        }
         Err(_elapsed) => (
             StatusCode::GATEWAY_TIMEOUT,
             format!("render exceeded {}s", RENDER_TIMEOUT.as_secs()),

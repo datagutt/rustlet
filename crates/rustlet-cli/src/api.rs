@@ -201,6 +201,158 @@ fn read_body_text(response: UreqResponse) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use base64::Engine as _;
+    use std::io::{Read, Write};
+    use std::net::{TcpListener, TcpStream};
+    use std::sync::{Arc, Mutex};
+    use std::thread;
+    use std::time::Duration;
+
+    /// Read one HTTP request (headers + body, using Content-Length) from `stream`.
+    fn read_http_request(stream: &mut TcpStream) -> String {
+        stream
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .expect("set read timeout");
+        let mut buf: Vec<u8> = Vec::new();
+        let mut tmp = [0u8; 1024];
+        loop {
+            match stream.read(&mut tmp) {
+                Ok(0) => break,
+                Ok(n) => {
+                    buf.extend_from_slice(&tmp[..n]);
+                    let text = String::from_utf8_lossy(&buf);
+                    if let Some(idx) = text.find("\r\n\r\n") {
+                        let header_len = idx + 4;
+                        let content_length = text
+                            .lines()
+                            .find_map(|line| {
+                                let lower = line.to_ascii_lowercase();
+                                lower
+                                    .strip_prefix("content-length:")
+                                    .map(|v| v.trim().parse::<usize>().unwrap_or(0))
+                            })
+                            .unwrap_or(0);
+                        if buf.len() >= header_len + content_length {
+                            break;
+                        }
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+        String::from_utf8_lossy(&buf).to_string()
+    }
+
+    /// Build a canned HTTP response with a Content-Length and an explicit close.
+    fn http_response(status_line: &str, body: &str) -> String {
+        format!(
+            "HTTP/1.1 {status_line}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+    }
+
+    /// Spawn a one-shot mock server. Returns its base URL, the recorded raw request,
+    /// and the server thread's join handle.
+    fn spawn_mock(response: String) -> (String, Arc<Mutex<Vec<String>>>, thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().expect("local addr");
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let req_clone = Arc::clone(&requests);
+        let handle = thread::spawn(move || {
+            if let Some(Ok(mut stream)) = listener.incoming().next() {
+                let req = read_http_request(&mut stream);
+                req_clone.lock().expect("lock").push(req);
+                let _ = stream.write_all(response.as_bytes());
+                let _ = stream.flush();
+            }
+        });
+        (format!("http://{addr}"), requests, handle)
+    }
+
+    #[test]
+    fn devices_parses_envelope_and_sends_auth() {
+        let resp = http_response(
+            "200 OK",
+            r#"{"devices":[{"id":"dev1","displayName":"Kitchen"}]}"#,
+        );
+        let (base, requests, handle) = spawn_mock(resp);
+        let client = Client::new(&base, "tok").unwrap();
+        let devices = client.devices().unwrap();
+        handle.join().unwrap();
+        assert_eq!(devices.len(), 1);
+        assert_eq!(devices[0].id, "dev1");
+        assert_eq!(devices[0].display_name, "Kitchen");
+        let req = requests.lock().unwrap()[0].clone();
+        assert!(req.starts_with("GET /v0/devices "), "req: {req}");
+        assert!(
+            req.to_lowercase().contains("authorization: bearer tok"),
+            "req: {req}"
+        );
+    }
+
+    #[test]
+    fn installations_parses_envelope() {
+        let resp = http_response(
+            "200 OK",
+            r#"{"installations":[{"id":"app1","appID":"weather"}]}"#,
+        );
+        let (base, requests, handle) = spawn_mock(resp);
+        let client = Client::new(&base, "tok").unwrap();
+        let installs = client.installations("dev1").unwrap();
+        handle.join().unwrap();
+        assert_eq!(installs.len(), 1);
+        assert_eq!(installs[0].id, "app1");
+        assert_eq!(installs[0].app_id, "weather");
+        let req = requests.lock().unwrap()[0].clone();
+        assert!(
+            req.starts_with("GET /v0/devices/dev1/installations "),
+            "req: {req}"
+        );
+    }
+
+    #[test]
+    fn push_sends_payload_path_and_auth() {
+        let (base, requests, handle) = spawn_mock(http_response("200 OK", "{}"));
+        let client = Client::new(&base, "tok").unwrap();
+        client
+            .push("dev1", b"imgbytes", Some("inst1"), false)
+            .unwrap();
+        handle.join().unwrap();
+        let req = requests.lock().unwrap()[0].clone();
+        assert!(req.starts_with("POST /v0/devices/dev1/push "), "req: {req}");
+        assert!(
+            req.to_lowercase().contains("authorization: bearer tok"),
+            "req: {req}"
+        );
+        assert!(req.contains("\"deviceID\":\"dev1\""), "req: {req}");
+        let b64 = base64::engine::general_purpose::STANDARD.encode(b"imgbytes");
+        assert!(req.contains(&b64), "req: {req}");
+    }
+
+    #[test]
+    fn delete_hits_installation_path() {
+        let (base, requests, handle) = spawn_mock(http_response("200 OK", "{}"));
+        let client = Client::new(&base, "tok").unwrap();
+        client.delete("dev1", "inst1").unwrap();
+        handle.join().unwrap();
+        let req = requests.lock().unwrap()[0].clone();
+        assert!(
+            req.starts_with("DELETE /v0/devices/dev1/installations/inst1 "),
+            "req: {req}"
+        );
+    }
+
+    #[test]
+    fn non_2xx_response_is_error_with_status_and_body() {
+        let (base, _requests, handle) =
+            spawn_mock(http_response("500 Internal Server Error", "boom"));
+        let client = Client::new(&base, "tok").unwrap();
+        let err = client.devices().unwrap_err();
+        handle.join().unwrap();
+        let msg = err.to_string();
+        assert!(msg.contains("500"), "msg: {msg}");
+        assert!(msg.contains("boom"), "msg: {msg}");
+    }
 
     #[test]
     fn push_payload_wire_format_is_tidbyt_compatible() {

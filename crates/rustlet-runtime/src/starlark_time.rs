@@ -407,27 +407,31 @@ pub fn datetime_to_unix(year: i64, month: i64, day: i64, hour: i64, min: i64, se
     days * 86400 + hour * 3600 + min * 60 + sec
 }
 
-pub fn unix_to_datetime(mut ts: i64) -> (i64, i64, i64, i64, i64, i64) {
-    let negative = ts < 0;
-    if negative {
-        ts = 0;
-    }
-
-    let sec = ts % 60;
-    ts /= 60;
-    let min = ts % 60;
-    ts /= 60;
-    let hour = ts % 24;
-    let mut days = ts / 24;
+pub fn unix_to_datetime(ts: i64) -> (i64, i64, i64, i64, i64, i64) {
+    // Euclidean division keeps the time-of-day non-negative for negative
+    // timestamps: e.g. ts = -1 is 1969-12-31 23:59:59, not a negative h/m/s.
+    let secs_of_day = ts.rem_euclid(86400);
+    let sec = secs_of_day % 60;
+    let min = (secs_of_day / 60) % 60;
+    let hour = secs_of_day / 3600;
+    let mut days = ts.div_euclid(86400); // may be negative (days before epoch)
 
     let mut year = 1970i64;
-    loop {
-        let days_in_year = if is_leap(year) { 366 } else { 365 };
-        if days < days_in_year {
-            break;
+    if days >= 0 {
+        loop {
+            let days_in_year = if is_leap(year) { 366 } else { 365 };
+            if days < days_in_year {
+                break;
+            }
+            days -= days_in_year;
+            year += 1;
         }
-        days -= days_in_year;
-        year += 1;
+    } else {
+        // Borrow whole years until the remaining day-of-year is non-negative.
+        while days < 0 {
+            year -= 1;
+            days += if is_leap(year) { 366 } else { 365 };
+        }
     }
 
     let leap = is_leap(year);

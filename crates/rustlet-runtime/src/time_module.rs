@@ -254,4 +254,40 @@ mod tests {
         let (y, m, d, h, mi, s) = t.components();
         assert_eq!((y, m, d, h, mi, s), (2021, 1, 1, 0, 0, 0));
     }
+
+    #[test]
+    fn unix_to_datetime_one_second_before_epoch() {
+        assert_eq!(unix_to_datetime(-1), (1969, 12, 31, 23, 59, 59));
+    }
+
+    #[test]
+    fn unix_to_datetime_one_day_before_epoch() {
+        assert_eq!(unix_to_datetime(-86400), (1969, 12, 31, 0, 0, 0));
+    }
+
+    #[test]
+    fn unix_to_datetime_epoch_unchanged() {
+        assert_eq!(unix_to_datetime(0), (1970, 1, 1, 0, 0, 0));
+    }
+
+    #[test]
+    fn unix_to_datetime_roundtrips_across_epoch() {
+        for ts in [
+            -1_i64,
+            -86_400,
+            -1_000_000,
+            -63_072_000,
+            -126_230_400,
+            0,
+            1,
+            1_700_000_000,
+        ] {
+            let (y, mo, d, h, mi, s) = unix_to_datetime(ts);
+            let back = datetime_to_unix(y, mo, d, h, mi, s);
+            assert_eq!(
+                back, ts,
+                "roundtrip failed for ts={ts}: {y}-{mo}-{d} {h}:{mi}:{s}"
+            );
+        }
+    }
 }
