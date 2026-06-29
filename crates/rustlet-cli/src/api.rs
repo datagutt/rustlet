@@ -69,6 +69,7 @@ impl Client {
         }
         let agent: ureq::Agent = ureq::Agent::config_builder()
             .timeout_global(Some(REQUEST_TIMEOUT))
+            .http_status_as_error(false)
             .user_agent(crate::util::user_agent())
             .build()
             .into();
@@ -201,7 +202,6 @@ fn read_body_text(response: UreqResponse) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use base64::Engine as _;
     use std::io::{Read, Write};
     use std::net::{TcpListener, TcpStream};
     use std::sync::{Arc, Mutex};
