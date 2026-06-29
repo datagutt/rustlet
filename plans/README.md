@@ -17,27 +17,25 @@ codebase is mature and well-tested; the selected work is hardening + coverage.
 |------|-------|----------|--------|------------|--------|
 | 001  | Make `cargo clippy --workspace --all-targets` pass (fix the broken CI clippy gate) | P1 | S | — | DONE — merged into main (`4197ae5`) |
 | 008  | Format the workspace so the CI `cargo fmt --check` gate passes | P1 | S | — | DONE — merged into main (`490121c`) |
-| 002  | Cap gzip/zip decompression to defuse decompression bombs | P2 | S–M | 001 | DONE — reviewed; commit `9c789d1` on branch `worktree-agent-a91acabbbeff65015`, not yet merged |
-| 003  | Give the in-memory HTTP cache a real hard size bound | P2 | S | 001 | DONE — reviewed; commit `c6747bf` on branch `worktree-agent-a47fdeb7f8fd45179`, not yet merged |
-| 004  | Make `magnify` reject overflowing dimensions instead of panicking | P2 | S | 001 | DONE — reviewed; commit `0db5512` on branch `worktree-agent-a4203a52a59820159`, not yet merged |
-| 005  | Add HTTP-level test coverage for the device API client | P2 | M | 001 | TODO |
-| 006  | Decode pre-1970 (negative) timestamps correctly in `unix_to_datetime` | P3 | M | 001 | TODO |
-| 007  | Stop the `api` render server from leaking internal error detail | P3 | S | 001 | TODO |
+| 002  | Cap gzip/zip decompression to defuse decompression bombs | P2 | S–M | 001 | DONE — merged into main (`9c789d1`) |
+| 003  | Give the in-memory HTTP cache a real hard size bound | P2 | S | 001 | DONE — merged into main (`c6747bf`) |
+| 004  | Make `magnify` reject overflowing dimensions instead of panicking | P2 | S | 001 | DONE — merged into main (`0db5512`) |
+| 005  | Add HTTP-level test coverage for the device API client | P2 | M | 001 | DONE — merged into main (`74f5ed1`); its non-2xx test caught a real bug, fixed by 009 |
+| 006  | Decode pre-1970 (negative) timestamps correctly in `unix_to_datetime` | P3 | M | 001 | DONE — merged into main (`3b61030`) |
+| 007  | Stop the `api` render server from leaking internal error detail | P3 | S | 001 | DONE — merged into main (`1790493`) |
+| 009  | Include the server response body in device API client error messages | P2 | S | 005 | DONE — merged into main (`7e7095c`); un-breaks the 005 test, also drops a redundant import |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED (one-line rationale)
 
 ## Merge state
 
-- **001 + 008 are merged into main** (`ef1cf8f`). Together they green CI's first
-  two `test`-job steps (fmt, then clippy).
-- **002, 003, 004 are reviewed/approved but unmerged**, each on its own worktree
-  branch off `ef1cf8f`. They touch disjoint files and `git merge-tree` confirms
-  all three merge cleanly with main and with each other. To land them (from main):
-  ```
-  git merge worktree-agent-a91acabbbeff65015   # 002 (9c789d1)
-  git merge worktree-agent-a47fdeb7f8fd45179   # 003 (c6747bf)
-  git merge worktree-agent-a4203a52a59820159   # 004 (0db5512)
-  ```
+- **ALL plans (001–009) are merged into main** (`7e7095c`). Integrated verification
+  on the stable (CI) toolchain: `cargo fmt --check` exit 0, `cargo clippy --workspace
+  --all-targets` exit 0, and tests pass (the device-client `api::` suite is 13/0,
+  including the `non_2xx` regression that 009 fixed). `rustlet-compat` is not run
+  locally (it needs the Go `pixlet` binary, which CI builds in a separate job).
+- The per-plan worktree branches (`worktree-agent-*`) are now redundant and can be
+  pruned with `git worktree remove` / `git branch -D`.
 
 ## Dependency notes
 
